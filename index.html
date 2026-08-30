@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hilton Dispatch</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%236b1518'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='28' fill='%23f6ead8' font-family='Georgia'%3EHD%3C/text%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="css/app.css" />
+  <script>
+    if (location.search.indexOf("preview=1") >= 0) document.documentElement.classList.add("preview-mode");
+  </script>
+</head>
+<body>
+  <div id="login" class="login-wrap">
+    <div class="login-card">
+      <div class="brand-mark">
+        <div class="hd">Private yard operations</div>
+        <h1>Hilton Dispatch</h1>
+        <p>Delivery invoices · driver route sheets · accounting</p>
+      </div>
+      <label style="text-align:center">Crew PIN</label>
+      <div class="pin-row">
+        <input class="pin-digit" inputmode="numeric" maxlength="1" aria-label="PIN digit 1" />
+        <input class="pin-digit" inputmode="numeric" maxlength="1" aria-label="PIN digit 2" />
+        <input class="pin-digit" inputmode="numeric" maxlength="1" aria-label="PIN digit 3" />
+        <input class="pin-digit" inputmode="numeric" maxlength="1" aria-label="PIN digit 4" />
+      </div>
+      <button class="primary" id="login-btn" type="button">Open dispatch</button>
+      <p class="login-hint">Default PIN is 1956 — change it in Settings after first login. This site is private. Do not put it on a public URL without a real host login in front of it.</p>
+    </div>
+  </div>
+
+  <div id="app" class="app-shell hidden">
+    <header class="topbar no-print">
+      <div class="left">
+        <div class="wordmark">Hilton Dispatch</div>
+        <div class="tag">Since 1956 · Southern Oregon</div>
+      </div>
+      <nav class="nav">
+        <button data-go="board" class="active" type="button">Board</button>
+        <button data-go="new" type="button">New ticket</button>
+        <button data-go="catalog" type="button">Material book</button>
+        <button data-go="settings" type="button">Settings</button>
+        <button id="logout" type="button">Lock</button>
+      </nav>
+    </header>
+
+    <main class="page">
+      <section data-view="board">
+        <div class="grid-3" style="margin-bottom:16px">
+          <div class="kpi"><div class="l">Tickets today</div><div class="n" id="kpi-today">0</div></div>
+          <div class="kpi"><div class="l">Open</div><div class="n" id="kpi-open">0</div></div>
+          <div class="kpi"><div class="l">Booked total</div><div class="n" id="kpi-total">$0.00</div></div>
+        </div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+            <h2>Dispatch board</h2>
+            <div class="btn-row" style="margin:0">
+              <input id="board-search" type="text" placeholder="Search customer, address, ticket…" style="min-width:240px" />
+              <button class="ghost" id="export-csv" type="button">Export CSV</button>
+            </div>
+          </div>
+          <div id="job-table"></div>
+        </div>
+      </section>
+
+      <section data-view="new" class="hidden">
+        <div class="grid-2">
+          <div class="card">
+            <h2>New delivery ticket</h2>
+            <p class="muted">Customer calls. Crew punches the address. Pick the yard that is loading the truck.</p>
+            <div id="price-banner" class="banner hidden">
+              <strong>Material prices are still $0.</strong>
+              Open Material Book and punch your real yard prices before you bill anyone. Delivery rates ($160 / $100) are already set.
+            </div>
+            <div class="row">
+              <div><label>Customer</label><input id="f-customer" type="text" placeholder="Name or company" /></div>
+              <div><label>Phone</label><input id="f-phone" type="tel" placeholder="541-…" /></div>
+            </div>
+            <div class="row">
+              <div><label>Customer email</label><input id="f-email" type="email" placeholder="optional" /></div>
+              <div><label>Deliver on</label><input id="f-when" type="datetime-local" /></div>
+            </div>
+            <label>Job / site name</label>
+            <input id="f-job" type="text" placeholder="Subdivision, job number, gate code…" />
+            <label>Delivery address</label>
+            <div class="addr-wrap">
+              <input id="f-address" type="text" placeholder="Street, city, OR zip" autocomplete="off" />
+              <div id="addr-suggest" class="addr-suggest hidden"></div>
+            </div>
+            <label>Origin yard</label>
+            <select id="f-yard"></select>
+            <label>Truck</label>
+            <div class="truck-pick">
+              <label class="choice"><input id="f-truck-dump" type="radio" name="truck" checked /><span><strong>Dump truck</strong><em id="dump-rate-label">$160 / hour · +8% route time</em></span></label>
+              <label class="choice"><input id="f-truck-small" type="radio" name="truck" /><span><strong>Small truck</strong><em id="small-rate-label">$100 / hour · mapped time</em></span></label>
+            </div>
+            <div class="row-3">
+              <div><label>Driver</label><input id="f-driver" type="text" /></div>
+              <div><label>Truck unit</label><input id="f-unit" type="text" /></div>
+              <div><label>PO / ref</label><input id="f-po" type="text" /></div>
+            </div>
+            <div class="row-3">
+              <div><label>This ticket $/hr</label><input id="f-rate" type="number" min="0" step="1" /></div>
+              <div><label>This ticket extra time %</label><input id="f-buffer" type="number" min="0" step="1" /></div>
+              <div><label>Loads</label><input id="f-loads" type="number" min="1" step="1" value="1" /></div>
+            </div>
+            <div class="row">
+              <div><label>Extra wait / site min</label><input id="f-extra" type="number" min="0" step="5" value="0" /></div>
+              <div><label>Status</label>
+                <select id="f-status">
+                  <option value="open">Open</option>
+                  <option value="printed">Printed</option>
+                  <option value="sent">Emailed accounting</option>
+                  <option value="delivered">Delivered</option>
+                  <option value="void">Void</option>
+                </select>
+              </div>
+            </div>
+            <p class="muted" style="margin:6px 0 0">Rate and buffer on this ticket override Settings for this job only. Change the yard defaults under Settings if every truck should move.</p>
+            <label>Driver / yard notes</label>
+            <textarea id="f-notes" placeholder="Gate code, dump spot, call 10 minutes out, stay off new asphalt…"></textarea>
+
+            <h3 style="margin-top:18px">Materials</h3>
+            <div class="material-add">
+              <div>
+                <label>Search material book</label>
+                <input id="mat-search" type="text" placeholder="topsoil, bark, drain rock…" />
+              </div>
+              <div>
+                <label>Qty</label>
+                <input id="mat-qty" type="number" min="0" step="0.25" value="1" />
+              </div>
+              <div>
+                <label>&nbsp;</label>
+                <button class="ok" id="mat-add-btn" type="button">Add first match</button>
+              </div>
+            </div>
+            <div id="mat-results" class="search-list" style="margin-top:8px"></div>
+            <div id="material-lines" style="margin-top:10px"></div>
+
+            <div class="btn-row">
+              <button class="primary" id="calc-btn" type="button">Calculate route</button>
+              <button class="ghost" id="save-btn" type="button">Save ticket</button>
+              <button class="ok" id="print-inv" type="button">Print invoice + route sheet</button>
+              <button class="ghost" id="email-acct" type="button">Email Nick / dispatch</button>
+            </div>
+          </div>
+          <div>
+            <div class="card" style="margin-bottom:14px">
+              <h3>Route</h3>
+              <div id="map" class="map-frame"></div>
+              <p class="muted" style="margin:8px 0 0" id="map-hint">Google Maps if a key is saved in Settings. OpenStreetMap is the fallback so the desk still works without one.</p>
+            </div>
+            <div class="quote-box" id="quote-box"></div>
+          </div>
+        </div>
+      </section>
+
+      <section data-view="catalog" class="hidden">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+            <h2>Material book</h2>
+            <div class="btn-row" style="margin:0">
+              <button class="ghost" id="reload-sheet" type="button">Reload 2026 price sheet</button>
+              <button class="ghost" id="add-catalog" type="button">Add material</button>
+              <button class="primary" id="save-catalog" type="button">Save book</button>
+            </div>
+          </div>
+          <p class="muted">Loaded from the Aug 26, 2026 store price sheet. Decorative rock and boulders are per pound on that sheet. Bark, soils, and most rock are per yard. Change a price here if the yard book moves — or hit Reload 2026 price sheet to put the published numbers back.</p>
+          <div id="catalog-table"></div>
+        </div>
+      </section>
+
+      <section data-view="settings" class="hidden">
+        <div class="grid-2">
+          <div class="card">
+            <h2>Yard settings</h2>
+            <label>Company name on invoices</label>
+            <input id="s-company" type="text" />
+            <div class="row">
+              <div><label>Office email</label><input id="s-email" type="email" /></div>
+              <div><label>Nick / dispatch email</label><input id="s-acct" type="email" placeholder="dispatch@hiltonlandscaping.com" /></div>
+            </div>
+            <label>Phone</label>
+            <input id="s-phone" type="tel" />
+            <div class="row">
+              <div><label>Dump truck $/hr</label><input id="s-dump" type="number" step="1" /></div>
+              <div><label>Small truck $/hr</label><input id="s-small" type="number" step="1" /></div>
+            </div>
+            <div class="row">
+              <div><label>Dump-truck extra time %</label><input id="s-mult" type="number" step="1" /></div>
+              <div>
+                <label>Trip billing</label>
+                <select id="s-trip">
+                  <option value="roundtrip">Round trip (out and back)</option>
+                  <option value="oneway">One way (to the job only)</option>
+                </select>
+              </div>
+            </div>
+            <div class="row-3">
+              <div><label>Minimum hours</label><input id="s-min" type="number" step="0.25" /></div>
+              <div><label>Round up (minutes)</label><input id="s-inc" type="number" step="5" /></div>
+              <div><label>Load minutes</label><input id="s-load" type="number" /></div>
+            </div>
+            <label>Unload / wait minutes</label>
+            <input id="s-unload" type="number" />
+            <label>Crew PIN</label>
+            <input id="s-pin" type="text" maxlength="8" />
+            <label>Google Maps API key</label>
+            <input id="s-gkey" type="text" placeholder="Paste key — Maps JavaScript + Directions + Geocoding" />
+            <p class="muted">Google is the preferred router. Enable Maps JavaScript API, Directions API, and Geocoding API on the key. Restrict it to this site. OpenStreetMap still runs if the key is blank or Google errors out.</p>
+            <div class="btn-row">
+              <button class="primary" id="save-settings" type="button">Save settings</button>
+              <button class="ghost" id="test-google" type="button">Test Google key</button>
+              <button class="ghost" id="export-json" type="button">Download backup</button>
+              <label class="ghost" style="margin:0;text-transform:none;letter-spacing:0;padding:10px 14px;cursor:pointer">
+                Restore backup
+                <input id="import-json" type="file" accept="application/json" hidden />
+              </label>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Yards</h2>
+            <p class="muted">Central Point, Medford, and Willow Creek Aggregate ship as origin points. Edit addresses if a gate or scale house is the real start.</p>
+            <div id="yard-editor"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="print-root" class="print-only"></div>
+  <div id="toast" class="toast"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/maps.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,1871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hilton Dispatch</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%236b1518'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='28' fill='%23f6ead8' font-family='Georgia'%3EHD%3C/text%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+:root {
+  --burgundy: #6b1518;
+  --burgundy-dark: #4a0e10;
+  --burgundy-deep: #2d080a;
+  --cream: #f6f0e6;
+  --cream-2: #efe6d6;
+  --paper: #fffcf7;
+  --ink: #1c1412;
+  --muted: #6b5b52;
+  --line: #d9cbb8;
+  --gold: #c4a35a;
+  --forest: #2f5d3a;
+  --forest-2: #1e3d26;
+  --warn: #9a3412;
+  --ok: #1d6b3a;
+  --shadow: 0 18px 40px rgba(43, 16, 12, 0.12);
+  --radius: 14px;
+  --font: "Source Serif 4", Georgia, serif;
+  --sans: "Source Sans 3", "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  font-family: var(--sans);
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 500px at 10% -10%, rgba(196, 163, 90, 0.16), transparent 50%),
+    linear-gradient(180deg, #efe4d2 0%, var(--cream) 220px);
+}
+
+.app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+
+/* LOGIN */
+.login-wrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+  background:
+    linear-gradient(180deg, rgba(43,8,10,0.55), rgba(43,8,10,0.72)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'%3E%3Cpath fill='%23ffffff' fill-opacity='0.03' d='M0 80h160v2H0zM80 0v160h2V0z'/%3E%3C/svg%3E"),
+    #3a1012;
+}
+.login-card {
+  width: min(440px, 100%);
+  background: var(--paper);
+  border-radius: 18px;
+  padding: 36px 32px 28px;
+  box-shadow: 0 30px 80px rgba(0,0,0,.35);
+}
+.brand-mark {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 22px;
+}
+.brand-mark .hd {
+  font-family: var(--font);
+  letter-spacing: .22em;
+  font-size: 13px;
+  color: var(--burgundy);
+  text-transform: uppercase;
+}
+.brand-mark h1 {
+  font-family: var(--font);
+  margin: 0;
+  font-weight: 600;
+  font-size: 34px;
+  letter-spacing: .02em;
+}
+.brand-mark p { margin: 0; color: var(--muted); font-size: 14px; }
+.pin-row { display: flex; gap: 8px; justify-content: center; margin: 18px 0 8px; }
+.pin-row input {
+  width: 52px; height: 62px; text-align: center; font-size: 28px;
+  border: 1px solid var(--line); border-radius: 10px; background: #fff;
+  font-family: var(--sans);
+}
+.login-card button.primary { width: 100%; margin-top: 14px; }
+.login-hint { text-align: center; color: var(--muted); font-size: 12px; margin-top: 14px; }
+
+/* TOP BAR */
+.topbar {
+  background: var(--burgundy);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 22px;
+  gap: 16px;
+  position: sticky; top: 0; z-index: 40;
+  box-shadow: 0 8px 24px rgba(74,14,16,.25);
+}
+.topbar .left { display: flex; align-items: baseline; gap: 14px; }
+.topbar .wordmark {
+  font-family: var(--font);
+  font-size: 22px;
+  letter-spacing: .04em;
+}
+.topbar .tag { font-size: 12px; opacity: .8; }
+.nav { display: flex; gap: 6px; flex-wrap: wrap; }
+.nav button, .ghost, .primary, .danger, .ok {
+  font-family: var(--sans);
+  border: 0; cursor: pointer;
+}
+.nav button {
+  background: transparent; color: #f3e7d8;
+  padding: 8px 12px; border-radius: 999px; font-size: 14px;
+}
+.nav button.active, .nav button:hover { background: rgba(255,255,255,.12); color: #fff; }
+
+/* LAYOUT */
+.page { width: min(1280px, calc(100% - 32px)); margin: 22px auto 48px; }
+.grid-2 { display: grid; grid-template-columns: 1.15fr .85fr; gap: 18px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px 18px 16px;
+}
+.card h2, .card h3 { font-family: var(--font); margin: 0 0 12px; }
+.card h2 { font-size: 26px; }
+.card h3 { font-size: 18px; color: var(--burgundy-dark); }
+
+label { display: block; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 10px 0 5px; }
+input[type="text"], input[type="tel"], input[type="email"], input[type="number"], input[type="password"], select, textarea {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+  font: 15px var(--sans); background: #fff; color: var(--ink);
+}
+textarea { min-height: 84px; resize: vertical; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+.primary {
+  background: var(--burgundy); color: #fff; padding: 11px 16px; border-radius: 10px; font-weight: 600;
+}
+.primary:hover { background: var(--burgundy-dark); }
+.ok { background: var(--forest); color: #fff; padding: 11px 16px; border-radius: 10px; font-weight: 600; }
+.ghost { background: transparent; color: var(--burgundy); border: 1px solid var(--line) !important; padding: 10px 14px; border-radius: 10px; }
+.danger { background: #8b1e1e; color: #fff; padding: 10px 14px; border-radius: 10px; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+
+.kpi {
+  background: linear-gradient(180deg, #fff, var(--cream-2));
+  border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+}
+.kpi .n { font-family: var(--font); font-size: 28px; }
+.kpi .l { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 8px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 9px 8px; border-bottom: 1px solid #efe6d8; vertical-align: middle; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover { background: #faf4ea; }
+.badge {
+  display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+}
+.badge.dump { background: #3b2118; color: #f3d7b5; }
+.badge.small { background: #203326; color: #d5ecd8; }
+.badge.open { background: #efe0b8; color: #6a4b10; }
+.badge.sent { background: #d7eadb; color: #1e5a32; }
+.badge.printed { background: #e4d7c6; color: #5a4030; }
+
+.truck-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.truck-pick label.choice {
+  text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--ink);
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px; cursor: pointer; background: #fff;
+}
+.truck-pick input { display: none; }
+.truck-pick input:checked + span,
+.truck-pick label.choice:has(input:checked) { outline: 2px solid var(--burgundy); background: #f8efe6; }
+.choice strong { display: block; font-size: 16px; }
+.choice em { color: var(--muted); font-style: normal; font-size: 13px; }
+
+.material-add { display: grid; grid-template-columns: 1.6fr .5fr auto; gap: 8px; align-items: end; }
+.addr-wrap { position: relative; }
+.addr-suggest {
+  position: absolute; left: 0; right: 0; top: 100%; z-index: 20;
+  background: #fff; border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: var(--shadow); max-height: 240px; overflow: auto;
+}
+.addr-suggest div { padding: 8px 12px; cursor: pointer; font-size: 13px; }
+.addr-suggest div:hover { background: #f6eee2; }
+.banner {
+  background: #f4e3b5; color: #5a3d08; border: 1px solid #e0c57a;
+  border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px;
+}
+.banner strong { display: block; margin-bottom: 2px; }
+.row-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.actions button { font-size: 12px; padding: 6px 10px; }
+.search-list { max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.search-list div { padding: 8px 10px; cursor: pointer; font-size: 14px; }
+.search-list div:hover { background: #f6eee2; }
+.search-list .cat { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+
+.quote-box {
+  background: #2d1212; color: #f6ead8; border-radius: 12px; padding: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.quote-box .total { font-family: var(--font); font-size: 34px; color: #fff; }
+.quote-box .break { white-space: pre-wrap; font-size: 12px; color: #d9c4a8; margin-top: 10px; line-height: 1.45; }
+.map-frame { height: 280px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: #ddd; }
+
+.toast {
+  position: fixed; bottom: 18px; right: 18px; background: var(--ink); color: #fff;
+  padding: 12px 16px; border-radius: 10px; display: none; z-index: 80;
+}
+
+/* PRINT — only the invoice + driver sheet leave the printer */
+.print-only { display: none; }
+@media print {
+  body { background: #fff !important; }
+  .app-shell, .login-wrap, .topbar, .no-print, .toast, .nav, .btn-row { display: none !important; }
+  #print-root.print-only, .print-only { display: block !important; }
+  .screen-only { display: none !important; }
+  .sheet { page-break-after: always; box-shadow: none; }
+  .sheet:last-child { page-break-after: auto; }
+}
+
+.sheet {
+  background: #fff;
+  color: #111;
+  padding: 28px 32px;
+  font-size: 13px;
+}
+.sheet-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  border-bottom: 3px solid #6b1518; padding-bottom: 12px; margin-bottom: 16px;
+}
+.sheet-head h1 { font-family: var(--font); margin: 0; font-size: 28px; color: #6b1518; }
+.sheet .row { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.totals-box {
+  margin-top: 16px; text-align: right; font-size: 15px;
+  border-top: 2px solid #6b1518; padding-top: 10px;
+}
+.driver-banner {
+  background: #6b1518; color: #fff; padding: 8px 12px; margin: 0 0 16px;
+  font-family: var(--font); letter-spacing: .08em; text-transform: uppercase;
+}
+.muted { color: #666; }
+.sig { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 36px; }
+.sig .line { border-top: 1px solid #333; padding-top: 6px; margin-top: 36px; font-size: 12px; }
+.recon { font-family: ui-monospace, Menlo, monospace; font-size: 11px; white-space: pre-wrap; background: #f7f3ec; padding: 10px 12px; border-radius: 8px; }
+
+html.preview-mode #login { display: none !important; }
+html.preview-mode #app { display: flex !important; }
+.hidden { display: none !important; }
+.empty { color: var(--muted); padding: 18px 4px; }
+
+@media (max-width: 900px) {
+  .grid-2, .grid-3, .row, .row-3, .row-4, .material-add, .truck-pick { grid-template-columns: 1fr; }
+  .topbar { flex-direction: column; align-items: flex-start; }
+}
+
+</style>
+  <script>
+    if (location.search.indexOf("preview=1") >= 0) document.documentElement.classList.add("preview-mode");
+  </script>
+</head>
+<body>
+  <div id="login" class="login-wrap">
+    <div class="login-card">
+      <div class="brand-mark">
+        <div class="hd">Private yard operations</div>
+        <h1>Hilton Dispatch</h1>
+        <p>Delivery invoices · driver route sheets · accounting</p>
+      </div>
+      <label style="text-align:center">Crew PIN</label>
+      <div class="pin-row">
+        <input class="pin-digit" inputmode="numeric" maxlength="1" aria-label="PIN digit 1" />
+        <input class="pin-digit" inputmode="numeric" maxlength="1" aria-label="PIN digit 2" />
+        <input class="pin-digit" inputmode="numeric" maxlength="1" aria-label="PIN digit 3" />
+        <input class="pin-digit" inputmode="numeric" maxlength="1" aria-label="PIN digit 4" />
+      </div>
+      <button class="primary" id="login-btn" type="button">Open dispatch</button>
+      <p class="login-hint">Default PIN is 1956 — change it in Settings after first login. This site is private. Do not put it on a public URL without a real host login in front of it.</p>
+    </div>
+  </div>
+
+  <div id="app" class="app-shell hidden">
+    <header class="topbar no-print">
+      <div class="left">
+        <div class="wordmark">Hilton Dispatch</div>
+        <div class="tag">Since 1956 · Southern Oregon</div>
+      </div>
+      <nav class="nav">
+        <button data-go="board" class="active" type="button">Board</button>
+        <button data-go="new" type="button">New ticket</button>
+        <button data-go="catalog" type="button">Material book</button>
+        <button data-go="settings" type="button">Settings</button>
+        <button id="logout" type="button">Lock</button>
+      </nav>
+    </header>
+
+    <main class="page">
+      <section data-view="board">
+        <div class="grid-3" style="margin-bottom:16px">
+          <div class="kpi"><div class="l">Tickets today</div><div class="n" id="kpi-today">0</div></div>
+          <div class="kpi"><div class="l">Open</div><div class="n" id="kpi-open">0</div></div>
+          <div class="kpi"><div class="l">Booked total</div><div class="n" id="kpi-total">$0.00</div></div>
+        </div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+            <h2>Dispatch board</h2>
+            <div class="btn-row" style="margin:0">
+              <input id="board-search" type="text" placeholder="Search customer, address, ticket…" style="min-width:240px" />
+              <button class="ghost" id="export-csv" type="button">Export CSV</button>
+            </div>
+          </div>
+          <div id="job-table"></div>
+        </div>
+      </section>
+
+      <section data-view="new" class="hidden">
+        <div class="grid-2">
+          <div class="card">
+            <h2>New delivery ticket</h2>
+            <p class="muted">Customer calls. Crew punches the address. Pick the yard that is loading the truck.</p>
+            <div id="price-banner" class="banner hidden">
+              <strong>Material prices are still $0.</strong>
+              Open Material Book and punch your real yard prices before you bill anyone. Delivery rates ($160 / $100) are already set.
+            </div>
+            <div class="row">
+              <div><label>Customer</label><input id="f-customer" type="text" placeholder="Name or company" /></div>
+              <div><label>Phone</label><input id="f-phone" type="tel" placeholder="541-…" /></div>
+            </div>
+            <div class="row">
+              <div><label>Customer email</label><input id="f-email" type="email" placeholder="optional" /></div>
+              <div><label>Deliver on</label><input id="f-when" type="datetime-local" /></div>
+            </div>
+            <label>Job / site name</label>
+            <input id="f-job" type="text" placeholder="Subdivision, job number, gate code…" />
+            <label>Delivery address</label>
+            <div class="addr-wrap">
+              <input id="f-address" type="text" placeholder="Street, city, OR zip" autocomplete="off" />
+              <div id="addr-suggest" class="addr-suggest hidden"></div>
+            </div>
+            <label>Origin yard</label>
+            <select id="f-yard"></select>
+            <label>Truck</label>
+            <div class="truck-pick">
+              <label class="choice"><input id="f-truck-dump" type="radio" name="truck" checked /><span><strong>Dump truck</strong><em id="dump-rate-label">$160 / hour · +8% route time</em></span></label>
+              <label class="choice"><input id="f-truck-small" type="radio" name="truck" /><span><strong>Small truck</strong><em id="small-rate-label">$100 / hour · mapped time</em></span></label>
+            </div>
+            <div class="row-3">
+              <div><label>Driver</label><input id="f-driver" type="text" /></div>
+              <div><label>Truck unit</label><input id="f-unit" type="text" /></div>
+              <div><label>PO / ref</label><input id="f-po" type="text" /></div>
+            </div>
+            <div class="row-3">
+              <div><label>This ticket $/hr</label><input id="f-rate" type="number" min="0" step="1" /></div>
+              <div><label>This ticket extra time %</label><input id="f-buffer" type="number" min="0" step="1" /></div>
+              <div><label>Loads</label><input id="f-loads" type="number" min="1" step="1" value="1" /></div>
+            </div>
+            <div class="row">
+              <div><label>Extra wait / site min</label><input id="f-extra" type="number" min="0" step="5" value="0" /></div>
+              <div><label>Status</label>
+                <select id="f-status">
+                  <option value="open">Open</option>
+                  <option value="printed">Printed</option>
+                  <option value="sent">Emailed accounting</option>
+                  <option value="delivered">Delivered</option>
+                  <option value="void">Void</option>
+                </select>
+              </div>
+            </div>
+            <p class="muted" style="margin:6px 0 0">Rate and buffer on this ticket override Settings for this job only. Change the yard defaults under Settings if every truck should move.</p>
+            <label>Driver / yard notes</label>
+            <textarea id="f-notes" placeholder="Gate code, dump spot, call 10 minutes out, stay off new asphalt…"></textarea>
+
+            <h3 style="margin-top:18px">Materials</h3>
+            <div class="material-add">
+              <div>
+                <label>Search material book</label>
+                <input id="mat-search" type="text" placeholder="topsoil, bark, drain rock…" />
+              </div>
+              <div>
+                <label>Qty</label>
+                <input id="mat-qty" type="number" min="0" step="0.25" value="1" />
+              </div>
+              <div>
+                <label>&nbsp;</label>
+                <button class="ok" id="mat-add-btn" type="button">Add first match</button>
+              </div>
+            </div>
+            <div id="mat-results" class="search-list" style="margin-top:8px"></div>
+            <div id="material-lines" style="margin-top:10px"></div>
+
+            <div class="btn-row">
+              <button class="primary" id="calc-btn" type="button">Calculate route</button>
+              <button class="ghost" id="save-btn" type="button">Save ticket</button>
+              <button class="ok" id="print-inv" type="button">Print invoice + route sheet</button>
+              <button class="ghost" id="email-acct" type="button">Email Nick / dispatch</button>
+            </div>
+          </div>
+          <div>
+            <div class="card" style="margin-bottom:14px">
+              <h3>Route</h3>
+              <div id="map" class="map-frame"></div>
+              <p class="muted" style="margin:8px 0 0" id="map-hint">Google Maps if a key is saved in Settings. OpenStreetMap is the fallback so the desk still works without one.</p>
+            </div>
+            <div class="quote-box" id="quote-box"></div>
+          </div>
+        </div>
+      </section>
+
+      <section data-view="catalog" class="hidden">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+            <h2>Material book</h2>
+            <div class="btn-row" style="margin:0">
+              <button class="ghost" id="reload-sheet" type="button">Reload 2026 price sheet</button>
+              <button class="ghost" id="add-catalog" type="button">Add material</button>
+              <button class="primary" id="save-catalog" type="button">Save book</button>
+            </div>
+          </div>
+          <p class="muted">Loaded from the Aug 26, 2026 store price sheet. Decorative rock and boulders are per pound on that sheet. Bark, soils, and most rock are per yard. Change a price here if the yard book moves — or hit Reload 2026 price sheet to put the published numbers back.</p>
+          <div id="catalog-table"></div>
+        </div>
+      </section>
+
+      <section data-view="settings" class="hidden">
+        <div class="grid-2">
+          <div class="card">
+            <h2>Yard settings</h2>
+            <label>Company name on invoices</label>
+            <input id="s-company" type="text" />
+            <div class="row">
+              <div><label>Office email</label><input id="s-email" type="email" /></div>
+              <div><label>Nick / dispatch email</label><input id="s-acct" type="email" placeholder="dispatch@hiltonlandscaping.com" /></div>
+            </div>
+            <label>Phone</label>
+            <input id="s-phone" type="tel" />
+            <div class="row">
+              <div><label>Dump truck $/hr</label><input id="s-dump" type="number" step="1" /></div>
+              <div><label>Small truck $/hr</label><input id="s-small" type="number" step="1" /></div>
+            </div>
+            <div class="row">
+              <div><label>Dump-truck extra time %</label><input id="s-mult" type="number" step="1" /></div>
+              <div>
+                <label>Trip billing</label>
+                <select id="s-trip">
+                  <option value="roundtrip">Round trip (out and back)</option>
+                  <option value="oneway">One way (to the job only)</option>
+                </select>
+              </div>
+            </div>
+            <div class="row-3">
+              <div><label>Minimum hours</label><input id="s-min" type="number" step="0.25" /></div>
+              <div><label>Round up (minutes)</label><input id="s-inc" type="number" step="5" /></div>
+              <div><label>Load minutes</label><input id="s-load" type="number" /></div>
+            </div>
+            <label>Unload / wait minutes</label>
+            <input id="s-unload" type="number" />
+            <label>Crew PIN</label>
+            <input id="s-pin" type="text" maxlength="8" />
+            <label>Google Maps API key</label>
+            <input id="s-gkey" type="text" placeholder="Paste key — Maps JavaScript + Directions + Geocoding" />
+            <p class="muted">Google is the preferred router. Enable Maps JavaScript API, Directions API, and Geocoding API on the key. Restrict it to this site. OpenStreetMap still runs if the key is blank or Google errors out.</p>
+            <div class="btn-row">
+              <button class="primary" id="save-settings" type="button">Save settings</button>
+              <button class="ghost" id="test-google" type="button">Test Google key</button>
+              <button class="ghost" id="export-json" type="button">Download backup</button>
+              <label class="ghost" style="margin:0;text-transform:none;letter-spacing:0;padding:10px 14px;cursor:pointer">
+                Restore backup
+                <input id="import-json" type="file" accept="application/json" hidden />
+              </label>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Yards</h2>
+            <p class="muted">Central Point, Medford, and Willow Creek Aggregate ship as origin points. Edit addresses if a gate or scale house is the real start.</p>
+            <div id="yard-editor"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="print-root" class="print-only"></div>
+  <div id="toast" class="toast"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+/* Hilton Dispatch — yards, rates, and the 2026 store price sheet.
+   Source: Store Price Sheet 2026.xlsx dated 2026-08-26.
+   Decorative rock / boulders on that sheet are priced per pound. Bark, soils, and
+   most aggregates are per yard. Edit anything in Material Book — it sticks in this browser. */
+
+window.HD_DEFAULTS = {
+  company: {
+    name: "Hilton Landscape Supply",
+    dba: "Hilton Dispatch",
+    tagline: "Southern Oregon's Finest Since 1956",
+    email: "info@hiltonlandscaping.com",
+    phone: "1-800-632-1510",
+    accountingEmail: "dispatch@hiltonlandscaping.com",
+    website: "hiltonlandscapesupply.com",
+  },
+  security: {
+    pin: "1956",
+  },
+  billing: {
+    dumpRate: 160,
+    smallRate: 100,
+    dumpTimeMultiplier: 1.08,
+    tripMode: "roundtrip",
+    minimumHours: 1,
+    incrementMinutes: 15,
+    loadMinutes: 15,
+    unloadMinutes: 15,
+    taxRate: 0,
+  },
+  maps: {
+    googleKey: "",
+  },
+  catalogConfirmed: true,
+  priceSheet: "2026-08-26",
+  yards: [
+    {
+      id: "cp",
+      name: "Central Point Yard",
+      address: "8087 Blackwell Rd, Central Point, OR 97502",
+      phone: "541-664-3374",
+      lat: 42.3916,
+      lng: -122.9124,
+    },
+    {
+      id: "medford",
+      name: "Medford Yard",
+      address: "5 S Stage Rd, Medford, OR 97501",
+      phone: "541-600-2640",
+      lat: 42.3266,
+      lng: -122.8747,
+    },
+    {
+      id: "willow",
+      name: "Willow Creek Aggregate",
+      address: "4825 Old Stage Rd, Central Point, OR 97502",
+      phone: "541-664-1254",
+      lat: 42.4089,
+      lng: -122.9398,
+    },
+  ],
+  materials: [
+    { id: "fresh-fines", name: "Fresh Fines Bark", category: "Bark", unit: "yd", price: 34 },
+    { id: "dark-fines", name: "Dark Fines", category: "Bark", unit: "yd", price: 34 },
+    { id: "multi-walk-on", name: "Multi Bark / Walk On (Fir)", category: "Bark", unit: "yd", price: 34 },
+    { id: "gorilla-hair", name: "Gorilla Hair (Redwood)", category: "Bark", unit: "yd", price: 20 },
+    { id: "redwood-fines", name: "Redwood Fines", category: "Bark", unit: "yd", price: 25 },
+    { id: "mini-pebble", name: "Mini Pebble (Fir)", category: "Bark", unit: "yd", price: 40 },
+    { id: "small-nugget", name: "Small Nugget (Fir)", category: "Bark", unit: "yd", price: 40 },
+    { id: "medium-nugget", name: "Medium Nugget (Fir)", category: "Bark", unit: "yd", price: 40 },
+    { id: "mulch", name: "Mulch", category: "Bark", unit: "yd", price: 33 },
+    { id: "fir-chips", name: "Fir Chips", category: "Bark", unit: "yd", price: 34 },
+    { id: "playground-chips", name: "Playground Chips", category: "Bark", unit: "yd", price: 44 },
+    { id: "dark-hemlock", name: "Dark Hemlock (Sliverless)", category: "Bark", unit: "yd", price: 70 },
+    { id: "red-hemlock", name: "Red Hemlock (Sliverless)", category: "Bark", unit: "yd", price: 70 },
+    { id: "forest-floor", name: "Forest Floor", category: "Bark", unit: "yd", price: 15 },
+
+    { id: "fresh-sawdust", name: "Fresh Sawdust", category: "Sawdust", unit: "yd", price: 30 },
+    { id: "aged-sawdust", name: "Aged Sawdust", category: "Sawdust", unit: "yd", price: 30 },
+    { id: "horse-bedding", name: "Horse Bedding", category: "Sawdust", unit: "yd", price: 15 },
+
+    { id: "topsoil", name: "Topsoil", category: "Soils", unit: "yd", price: 25 },
+    { id: "forest-loam", name: "Forest Loam", category: "Soils", unit: "yd", price: 27 },
+    { id: "topsoil-plus", name: "Topsoil Plus", category: "Soils", unit: "yd", price: 34 },
+    { id: "compost-omri", name: "Compost (OMRI Listed)", category: "Soils", unit: "yd", price: 35 },
+    { id: "compost-plus", name: "Compost Plus", category: "Soils", unit: "yd", price: 38 },
+    { id: "ground-compost", name: "Ground Compost", category: "Soils", unit: "yd", price: 40 },
+    { id: "compost-plus-rhyolite", name: "Compost Plus w/ Rhyolite", category: "Soils", unit: "yd", price: 50 },
+    { id: "gard-n-grow", name: "Gard-N-Grow", category: "Soils", unit: "yd", price: 55 },
+    { id: "chets-mix", name: "Chet's Mix", category: "Soils", unit: "yd", price: 55 },
+    { id: "super-chets", name: "Super Chet's Mix", category: "Soils", unit: "yd", price: 60 },
+    { id: "living-soil", name: "Living Soil", category: "Soils", unit: "yd", price: 86 },
+    { id: "wild-scenic-rhyolite", name: "Wild-N-Scenic w/ Rhyolite", category: "Soils", unit: "yd", price: 70 },
+    { id: "wild-scenic", name: "Wild-N-Scenic", category: "Soils", unit: "yd", price: 80 },
+    { id: "clay-buster", name: "Clay Buster", category: "Soils", unit: "yd", price: 50 },
+    { id: "worm-castings", name: "Worm Castings", category: "Soils", unit: "yd", price: 375 },
+
+    { id: "red-cinder", name: "Red Cinder (1 1/2\" or 3/8\" minus)", category: "Rock / yard", unit: "yd", price: 40 },
+    { id: "black-cinder", name: "Black Cinder", category: "Rock / yard", unit: "yd", price: 78 },
+    { id: "fill-sand", name: "Fill Sand", category: "Rock / yard", unit: "yd", price: 48 },
+    { id: "pea-gravel", name: "Pea Gravel", category: "Rock / yard", unit: "yd", price: 36 },
+    { id: "round-drain", name: "3/4\" Round – 1 1/2\" Drain", category: "Rock / yard", unit: "yd", price: 36 },
+    { id: "quarter-10", name: "1/4\" x #10", category: "Rock / yard", unit: "yd", price: 46 },
+    { id: "crushed-clean-river", name: "Crushed Clean River (3/4\"x1/2\" or 1/4\"x1/2\")", category: "Rock / yard", unit: "yd", price: 48 },
+    { id: "silver-fines", name: "Silver Fines", category: "Rock / yard", unit: "yd", price: 45 },
+    { id: "three-quarter-minus", name: "3/4\" Minus", category: "Rock / yard", unit: "yd", price: 28 },
+    { id: "clean-granite", name: "Clean Granite (1 1/2\"–3/4\")", category: "Rock / yard", unit: "yd", price: 45 },
+    { id: "clean-granite-38", name: "3/8\" Clean Granite", category: "Rock / yard", unit: "yd", price: 65 },
+    { id: "dg", name: "DG (Screened Granite)", category: "Rock / yard", unit: "yd", price: 28 },
+    { id: "rogue-valley-gold", name: "Rogue Valley Gold", category: "Rock / yard", unit: "yd", price: 65 },
+    { id: "blue-ridge-yd", name: "Blue Ridge (1 1/2\", 3/4\", 3/4\" minus)", category: "Rock / yard", unit: "yd", price: 50 },
+    { id: "rhyolite", name: "Rhyolite (Pumice)", category: "Rock / yard", unit: "yd", price: 45 },
+
+    { id: "beach-sand", name: "Beach Sand", category: "Rock / lb", unit: "lb", price: 0.10 },
+    { id: "river-cobble", name: "River Cobblestone", category: "Rock / lb", unit: "lb", price: 0.10 },
+    { id: "salt-pepper", name: "Salt & Pepper", category: "Rock / lb", unit: "lb", price: 0.12 },
+    { id: "aspen-mountain", name: "Aspen Mountain", category: "Rock / lb", unit: "lb", price: 0.14 },
+    { id: "sierra-desert", name: "Sierra Desert", category: "Rock / lb", unit: "lb", price: 0.14 },
+    { id: "dolomite", name: "Dolomite 1 1/2\"–3\"", category: "Rock / lb", unit: "lb", price: 0.45 },
+    { id: "pami-pebble", name: "Pami Pebble", category: "Rock / lb", unit: "lb", price: 0.16 },
+    { id: "white-silica", name: "White Silica", category: "Rock / lb", unit: "lb", price: 0.18 },
+    { id: "jade-green", name: "Jade Green", category: "Rock / lb", unit: "lb", price: 0.20 },
+    { id: "palm-desert", name: "Palm Desert Gold", category: "Rock / lb", unit: "lb", price: 0.30 },
+    { id: "ivans-gold", name: "Ivans Gold 3/4\" or 1 1/2\"", category: "Rock / lb", unit: "lb", price: 0.18 },
+    { id: "mexi-pebble", name: "Mexi Pebble", category: "Rock / lb", unit: "lb", price: 0.30 },
+    { id: "mexi-buttons", name: "Mexi Buttons", category: "Rock / lb", unit: "lb", price: 0.55 },
+
+    { id: "boulder-granite", name: "Large Granite Boulders", category: "Boulders / lb", unit: "lb", price: 0.10 },
+    { id: "boulder-moss", name: "Moss Rock Boulders", category: "Boulders / lb", unit: "lb", price: 0.15 },
+    { id: "boulder-blue-ridge", name: "Blue Ridge Boulders", category: "Boulders / lb", unit: "lb", price: 0.18 },
+    { id: "boulder-sierra", name: "Sierra Moonlite Purple Boulders", category: "Boulders / lb", unit: "lb", price: 0.25 },
+    { id: "boulder-basalt", name: "Basalt Boulders", category: "Boulders / lb", unit: "lb", price: 0.25 },
+
+    { id: "guard-8", name: "Guard Rail Post 8\"x8\"x8'", category: "Site materials", unit: "ea", price: 22 },
+    { id: "guard-6", name: "Guard Rail Post 8\"x8\"x6'", category: "Site materials", unit: "ea", price: 12 },
+    { id: "eco-block", name: "Eco Blocks (check availability)", category: "Site materials", unit: "ea", price: 125 },
+    { id: "k-rail", name: "K-Rails", category: "Site materials", unit: "ea", price: 500 },
+  ],
+};
+
+</script>
+  <script>
+/* Hilton Dispatch — rate + time engine
+   Formula (printed on every invoice so accounting can reconcile):
+
+   1. Mapped one-way drive minutes          = T_one
+   2. Trip minutes                          = (roundtrip ? T_one * 2 : T_one) * loads
+   3. Dump-truck road buffer                = dump ? tripMinutes * 1.08 : tripMinutes
+                                              (8% only on road time — big truck is slower)
+   4. Site minutes                          = (loadMinutes + unloadMinutes) * loads + extraMinutes
+   5. Raw hours                             = (adjustedDrive + site) / 60
+   6. Billable hours                        = max(minimumHours, ceil to incrementMinutes)
+   7. Delivery fee                          = billableHours * ($160 dump | $100 small)
+   8. Materials                             = Σ qty * unitPrice
+   9. Tax                                   = (delivery + materials) * taxRate   (OR default 0)
+  10. Total                                 = delivery + materials + tax
+*/
+
+window.HDEngine = {
+  hoursFromMinutes(mins) {
+    return Math.max(0, Number(mins) || 0) / 60;
+  },
+
+  roundUpHours(rawHours, minimumHours, incrementMinutes) {
+    const minH = Number(minimumHours) || 0;
+    const step = (Number(incrementMinutes) || 15) / 60;
+    let h = Math.max(0, Number(rawHours) || 0);
+    if (step > 0) {
+      h = Math.ceil(h / step - 1e-9) * step;
+    }
+    return Math.max(minH, Number(h.toFixed(4)));
+  },
+
+  formatHours(h) {
+    const n = Number(h) || 0;
+    const hrs = Math.floor(n + 1e-9);
+    const mins = Math.round((n - hrs) * 60);
+    if (hrs === 0) return `${mins} min`;
+    if (mins === 0) return `${hrs} hr`;
+    return `${hrs} hr ${mins} min`;
+  },
+
+  money(n) {
+    const v = Number(n);
+    if (!isFinite(v)) return "$0.00";
+    return v.toLocaleString("en-US", { style: "currency", currency: "USD" });
+  },
+
+  quote({
+    oneWaySeconds,
+    truck,
+    billing,
+    materials,
+    loads,
+    extraMinutes,
+  }) {
+    const b = billing || {};
+    const loadCount = Math.max(1, Number(loads) || 1);
+    const extra = Math.max(0, Number(extraMinutes) || 0);
+    const oneWayMin = Math.max(0, (Number(oneWaySeconds) || 0) / 60);
+    const tripFactor = (b.tripMode || "roundtrip") === "oneway" ? 1 : 2;
+    const tripMin = oneWayMin * tripFactor * loadCount;
+    const isDump = truck === "dump";
+    const multiplier = isDump ? Number(b.dumpTimeMultiplier) || 1.08 : 1;
+    const adjustedDriveMin = tripMin * multiplier;
+    const siteMin = ((Number(b.loadMinutes) || 0) + (Number(b.unloadMinutes) || 0)) * loadCount + extra;
+    const rawMin = adjustedDriveMin + siteMin;
+    const rawHours = rawMin / 60;
+    const billableHours = this.roundUpHours(rawHours, b.minimumHours, b.incrementMinutes);
+    const rate = isDump ? Number(b.dumpRate) || 160 : Number(b.smallRate) || 100;
+    const deliveryFee = Number((billableHours * rate).toFixed(2));
+
+    const lines = (materials || []).map((m) => {
+      const qty = Number(m.qty) || 0;
+      const price = Number(m.price) || 0;
+      return {
+        ...m,
+        qty,
+        price,
+        amount: Number((qty * price).toFixed(2)),
+      };
+    });
+    const materialsTotal = Number(lines.reduce((s, l) => s + l.amount, 0).toFixed(2));
+    const subtotal = deliveryFee + materialsTotal;
+    const taxRate = Number(b.taxRate) || 0;
+    const tax = Number((subtotal * taxRate).toFixed(2));
+    const total = Number((subtotal + tax).toFixed(2));
+
+    return {
+      oneWayMin,
+      tripFactor,
+      loadCount,
+      extra,
+      tripMin,
+      isDump,
+      multiplier,
+      adjustedDriveMin,
+      siteMin,
+      rawMin,
+      rawHours,
+      billableHours,
+      rate,
+      deliveryFee,
+      lines,
+      materialsTotal,
+      subtotal,
+      taxRate,
+      tax,
+      total,
+      formula: this.describe({
+        oneWayMin, tripFactor, loadCount, extra, tripMin, isDump, multiplier,
+        adjustedDriveMin, siteMin, rawHours, billableHours, rate, deliveryFee,
+        materialsTotal, tax, total, billing: b,
+      }),
+    };
+  },
+
+  describe(q) {
+    const tripLabel = q.tripFactor === 2 ? "round trip" : "one way";
+    const dumpNote = q.isDump
+      ? ` × ${Number(q.multiplier).toFixed(2)} dump-truck buffer`
+      : " (no buffer — small truck)";
+    const loadNote = q.loadCount > 1 ? ` × ${q.loadCount} loads` : "";
+    return [
+      `Mapped one-way drive: ${q.oneWayMin.toFixed(1)} min`,
+      `Trip mode: ${tripLabel}${loadNote} → ${q.tripMin.toFixed(1)} min road time`,
+      `Drive after buffer${dumpNote}: ${q.adjustedDriveMin.toFixed(1)} min`,
+      `Yard load + site unload${loadNote}${q.extra ? ` + ${q.extra} extra min` : ""}: ${q.siteMin.toFixed(0)} min`,
+      `Raw time: ${q.rawHours.toFixed(2)} hr (${this.formatHours(q.rawHours)})`,
+      `Billable (min ${q.billing.minimumHours} hr, ${q.billing.incrementMinutes}-min steps): ${q.billableHours.toFixed(2)} hr @ $${q.rate}/hr`,
+      `Delivery fee: ${this.money(q.deliveryFee)}`,
+      `Materials: ${this.money(q.materialsTotal)}`,
+      q.tax ? `Tax: ${this.money(q.tax)}` : null,
+      `TOTAL: ${this.money(q.total)}`,
+    ].filter(Boolean).join("\n");
+  },
+};
+
+</script>
+  <script>
+/* Hilton Dispatch — routing
+   Prefers Google Maps JavaScript API (Geocoder + DirectionsService) when a key is saved.
+   Falls back to Nominatim + OSRM so the yard can run on day one with no key. */
+
+window.HDMaps = {
+  lastRoute: null,
+  _googleLoading: null,
+  _suggestTimer: null,
+
+  async ensureGoogle(key) {
+    if (!key) return false;
+    if (window.google && window.google.maps && window.google.maps.DirectionsService) return true;
+    if (this._googleLoading) return this._googleLoading;
+    this._googleLoading = new Promise((resolve) => {
+      const existing = document.getElementById("hd-google-js");
+      if (existing) {
+        existing.addEventListener("load", () => resolve(!!(window.google && window.google.maps)));
+        existing.addEventListener("error", () => resolve(false));
+        return;
+      }
+      const s = document.createElement("script");
+      s.id = "hd-google-js";
+      s.async = true;
+      s.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(key) + "&libraries=places";
+      s.onload = () => resolve(!!(window.google && window.google.maps));
+      s.onerror = () => resolve(false);
+      document.head.appendChild(s);
+    });
+    return this._googleLoading;
+  },
+
+  geocodeNominatim(address) {
+    const url =
+      "https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&countrycodes=us&q=" +
+      encodeURIComponent(address);
+    return fetch(url, { headers: { Accept: "application/json" } }).then((res) => {
+      if (!res.ok) throw new Error("Geocoder unavailable (" + res.status + ")");
+      return res.json();
+    }).then((data) => {
+      if (!data || !data[0]) throw new Error("Could not find that address. Check spelling and try again.");
+      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: data[0].display_name };
+    });
+  },
+
+  suggestNominatim(query) {
+    const q = (query || "").trim();
+    if (q.length < 4) return Promise.resolve([]);
+    const url =
+      "https://nominatim.openstreetmap.org/search?format=json&limit=6&addressdetails=1&countrycodes=us&q=" +
+      encodeURIComponent(q);
+    return fetch(url, { headers: { Accept: "application/json" } })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => (data || []).map((hit) => ({
+        label: hit.display_name,
+        lat: parseFloat(hit.lat),
+        lng: parseFloat(hit.lon),
+      })))
+      .catch(() => []);
+  },
+
+  debounceSuggest(query, cb) {
+    clearTimeout(this._suggestTimer);
+    this._suggestTimer = setTimeout(() => {
+      this.suggestNominatim(query).then(cb);
+    }, 280);
+  },
+
+  routeOSRM(from, to) {
+    const path = `${from.lng},${from.lat};${to.lng},${to.lat}`;
+    const url = `https://router.project-osrm.org/route/v1/driving/${path}?overview=full&geometries=geojson&steps=true`;
+    return fetch(url).then((res) => {
+      if (!res.ok) throw new Error("Router unavailable (" + res.status + ")");
+      return res.json();
+    }).then((data) => {
+      if (!data.routes || !data.routes[0]) throw new Error("No driving route found between yard and job.");
+      const r = data.routes[0];
+      const steps = [];
+      (r.legs || []).forEach((leg) => {
+        (leg.steps || []).forEach((s) => {
+          const name = s.name || "";
+          const type = (s.maneuver && s.maneuver.type) || "continue";
+          const modifier = (s.maneuver && s.maneuver.modifier) || "";
+          const verb = [type, modifier].filter(Boolean).join(" ");
+          const road = name ? ` onto ${name}` : "";
+          steps.push({
+            instruction: `${verb}${road}`.replace(/^\w/, (c) => c.toUpperCase()),
+            miles: (s.distance || 0) / 1609.34,
+            minutes: (s.duration || 0) / 60,
+          });
+        });
+      });
+      return {
+        provider: "osrm",
+        seconds: r.duration,
+        meters: r.distance,
+        miles: r.distance / 1609.34,
+        geometry: r.geometry,
+        steps,
+      };
+    });
+  },
+
+  geocodeGoogle(address) {
+    return new Promise((resolve, reject) => {
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ address, componentRestrictions: { country: "US" } }, (results, status) => {
+        if (status === "OK" && results[0]) {
+          const loc = results[0].geometry.location;
+          resolve({ lat: loc.lat(), lng: loc.lng(), label: results[0].formatted_address });
+        } else {
+          reject(new Error("Google Geocoding: " + status));
+        }
+      });
+    });
+  },
+
+  routeGoogle(from, to) {
+    return new Promise((resolve, reject) => {
+      const svc = new google.maps.DirectionsService();
+      svc.route({
+        origin: { lat: from.lat, lng: from.lng },
+        destination: { lat: to.lat, lng: to.lng },
+        travelMode: google.maps.TravelMode.DRIVING,
+      }, (result, status) => {
+        if (status !== "OK" || !result.routes[0]) {
+          reject(new Error("Google Directions: " + status));
+          return;
+        }
+        const route = result.routes[0];
+        const leg = route.legs[0];
+        const steps = (leg.steps || []).map((s) => ({
+          instruction: (s.instructions || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
+          miles: (s.distance && s.distance.value ? s.distance.value : 0) / 1609.34,
+          minutes: (s.duration && s.duration.value ? s.duration.value : 0) / 60,
+        }));
+        const path = [];
+        route.overview_path.forEach((p) => path.push([p.lng(), p.lat()]));
+        resolve({
+          provider: "google",
+          seconds: leg.duration.value,
+          meters: leg.distance.value,
+          miles: leg.distance.value / 1609.34,
+          geometry: path.length ? { type: "LineString", coordinates: path } : null,
+          steps,
+          textDuration: leg.duration.text,
+          textDistance: leg.distance.text,
+        });
+      });
+    });
+  },
+
+  async route(fromAddr, toAddr, fromHint, googleKey) {
+    let from = fromHint && fromHint.lat ? { lat: fromHint.lat, lng: fromHint.lng, label: fromHint.address || fromAddr } : null;
+    let to = null;
+    const key = (googleKey || "").trim();
+
+    if (key) {
+      const ready = await this.ensureGoogle(key);
+      if (ready) {
+        try {
+          if (!from) from = await this.geocodeGoogle(fromAddr);
+          to = await this.geocodeGoogle(toAddr);
+          const r = await this.routeGoogle(from, to);
+          this.lastRoute = { from, to, ...r };
+          return this.lastRoute;
+        } catch (err) {
+          console.warn("Google routing failed, falling back to OSM", err);
+        }
+      }
+    }
+
+    if (!from) from = await this.geocodeNominatim(fromAddr);
+    to = await this.geocodeNominatim(toAddr);
+    const r = await this.routeOSRM(from, to);
+    this.lastRoute = { from, to, ...r };
+    return this.lastRoute;
+  },
+};
+
+</script>
+  <script>
+/* Hilton Dispatch — UI + persistence */
+
+const STORE_KEY = "hilton-dispatch-v2";
+const LEGACY_KEY = "hilton-dispatch-v1";
+
+const state = {
+  session: false,
+  view: "board",
+  draft: blankDraft(),
+  quote: null,
+  route: null,
+  map: null,
+  mapLayer: null,
+  filter: "",
+};
+
+function blankDraft() {
+  const when = new Date();
+  when.setMinutes(when.getMinutes() - when.getTimezoneOffset());
+  return {
+    id: null,
+    createdAt: null,
+    status: "open",
+    customer: "",
+    phone: "",
+    email: "",
+    jobName: "",
+    address: "",
+    city: "",
+    notes: "",
+    yardId: "cp",
+    truck: "dump",
+    driver: "",
+    truckUnit: "",
+    po: "",
+    loads: 1,
+    extraMinutes: 0,
+    rateOverride: null,
+    bufferOverride: null,
+    deliverOn: when.toISOString().slice(0, 16),
+    materials: [],
+    route: null,
+    quote: null,
+  };
+}
+
+function normalizeStore(data) {
+  data.settings = {
+    ...HD_DEFAULTS,
+    ...data.settings,
+    company: { ...HD_DEFAULTS.company, ...(data.settings && data.settings.company) },
+    billing: { ...HD_DEFAULTS.billing, ...(data.settings && data.settings.billing) },
+    security: { ...HD_DEFAULTS.security, ...(data.settings && data.settings.security) },
+    maps: { ...HD_DEFAULTS.maps, ...(data.settings && data.settings.maps) },
+  };
+  if (!Array.isArray(data.jobs)) data.jobs = [];
+  if (!Array.isArray(data.settings.yards) || !data.settings.yards.length) data.settings.yards = HD_DEFAULTS.yards;
+  const oldAcct = (data.settings.company.accountingEmail || "").toLowerCase();
+  if (!oldAcct || oldAcct.indexOf("accounting@hilton") === 0) {
+    data.settings.company.accountingEmail = HD_DEFAULTS.company.accountingEmail;
+  }
+  if (data.settings.priceSheet !== HD_DEFAULTS.priceSheet || !Array.isArray(data.settings.materials) || !data.settings.materials.length) {
+    data.settings.materials = JSON.parse(JSON.stringify(HD_DEFAULTS.materials));
+    data.settings.priceSheet = HD_DEFAULTS.priceSheet;
+    data.settings.catalogConfirmed = true;
+  }
+  return data;
+}
+
+function loadStore() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY) || localStorage.getItem(LEGACY_KEY);
+    if (!raw) return seedStore();
+    const data = normalizeStore(JSON.parse(raw));
+    saveStore(data);
+    return data;
+  } catch (e) {
+    return seedStore();
+  }
+}
+
+function seedStore() {
+  const data = { settings: JSON.parse(JSON.stringify(HD_DEFAULTS)), jobs: [] };
+  saveStore(data);
+  return data;
+}
+
+function saveStore(data) {
+  localStorage.setItem(STORE_KEY, JSON.stringify(data));
+}
+
+let db = loadStore();
+
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.style.display = "block";
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { el.style.display = "none"; }, 2800);
+}
+
+function nextTicket() {
+  const year = new Date().getFullYear();
+  const seq = String(db.jobs.length + 1).padStart(4, "0");
+  return `HD-${year}-${seq}`;
+}
+
+function yardById(id) {
+  return db.settings.yards.find((y) => y.id === id) || db.settings.yards[0];
+}
+
+function $(id) { return document.getElementById(id); }
+
+function show(view) {
+  state.view = view;
+  document.querySelectorAll("[data-view]").forEach((el) => {
+    el.classList.toggle("hidden", el.getAttribute("data-view") !== view);
+  });
+  document.querySelectorAll(".nav button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.go === view);
+  });
+  if (view === "board") renderBoard();
+  if (view === "new") renderForm();
+  if (view === "settings") renderSettings();
+  if (view === "catalog") renderCatalog();
+}
+
+function lock() {
+  state.session = false;
+  $("app").classList.add("hidden");
+  $("login").classList.remove("hidden");
+  document.querySelectorAll(".pin-digit").forEach((i) => i.value = "");
+  const first = document.querySelector(".pin-digit");
+  if (first) first.focus();
+}
+
+function unlock() {
+  state.session = true;
+  $("login").classList.add("hidden");
+  $("app").classList.remove("hidden");
+  show("board");
+}
+
+function pinValue() {
+  return Array.from(document.querySelectorAll(".pin-digit")).map((i) => i.value).join("");
+}
+
+function attemptLogin() {
+  const pin = pinValue();
+  if (pin && pin === String(db.settings.security.pin || "1956")) {
+    unlock();
+  } else {
+    toast("Wrong PIN");
+    document.querySelectorAll(".pin-digit").forEach((i) => i.value = "");
+    document.querySelector(".pin-digit").focus();
+  }
+}
+
+function bindPin() {
+  const boxes = Array.from(document.querySelectorAll(".pin-digit"));
+  boxes.forEach((box, i) => {
+    box.addEventListener("input", () => {
+      box.value = box.value.replace(/\D/g, "").slice(-1);
+      if (box.value && boxes[i + 1]) boxes[i + 1].focus();
+      if (pinValue().length === boxes.length) attemptLogin();
+    });
+    box.addEventListener("keydown", (e) => {
+      if (e.key === "Backspace" && !box.value && boxes[i - 1]) boxes[i - 1].focus();
+      if (e.key === "Enter") attemptLogin();
+    });
+  });
+}
+
+function renderBoard() {
+  const jobs = db.jobs.slice().reverse();
+  const q = (state.filter || "").toLowerCase();
+  const list = q
+    ? jobs.filter((j) => JSON.stringify(j).toLowerCase().includes(q))
+    : jobs;
+  const today = new Date().toISOString().slice(0, 10);
+  const todays = jobs.filter((j) => (j.createdAt || "").slice(0, 10) === today);
+  const open = jobs.filter((j) => j.status === "open");
+  const billed = jobs.reduce((s, j) => s + ((j.quote && j.quote.total) || 0), 0);
+
+  $("kpi-today").textContent = String(todays.length);
+  $("kpi-open").textContent = String(open.length);
+  $("kpi-total").textContent = HDEngine.money(billed);
+
+  if (!list.length) {
+    $("job-table").innerHTML = `<div class="empty">No tickets yet. Take the call, punch the address, build the ticket.</div>`;
+    return;
+  }
+  $("job-table").innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Ticket</th><th>Customer</th><th>Yard</th><th>Truck</th><th>Total</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody>
+        ${list.map((j) => `
+          <tr class="clickable" data-open="${j.id}">
+            <td><strong>${j.id}</strong><div class="muted">${(j.createdAt || "").replace("T", " ").slice(0, 16)}</div></td>
+            <td>${esc(j.customer) || "—"}<div class="muted">${esc(j.address)}</div></td>
+            <td>${esc((yardById(j.yardId) || {}).name || "")}</td>
+            <td><span class="badge ${j.truck}">${truckLabel(j.truck)}</span></td>
+            <td>${j.quote ? HDEngine.money(j.quote.total) : "—"}</td>
+            <td><span class="badge ${j.status}">${j.status}</span></td>
+            <td class="actions">
+              <button class="ghost" data-open="${j.id}">Open</button>
+              <button class="ghost" data-dup="${j.id}">Copy</button>
+              <button class="ghost" data-st="${j.id}|delivered">Done</button>
+              <button class="ghost" data-st="${j.id}|void">Void</button>
+            </td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
+}
+
+function truckLabel(truck) {
+  const b = db.settings.billing;
+  return truck === "dump" ? `Dump $${b.dumpRate}` : `Small $${b.smallRate}`;
+}
+
+function catalogNeedsPrices() {
+  return db.settings.materials.some((m) => !m.price);
+}
+
+function renderForm() {
+  const d = state.draft;
+  const b = db.settings.billing;
+  $("f-customer").value = d.customer;
+  $("f-phone").value = d.phone;
+  $("f-email").value = d.email || "";
+  $("f-when").value = d.deliverOn || "";
+  $("f-job").value = d.jobName;
+  $("f-address").value = d.address;
+  $("f-notes").value = d.notes;
+  $("f-driver").value = d.driver;
+  $("f-unit").value = d.truckUnit;
+  $("f-po").value = d.po;
+  $("f-loads").value = d.loads || 1;
+  $("f-extra").value = d.extraMinutes || 0;
+  $("f-status").value = d.status || "open";
+  $("f-truck-dump").checked = d.truck === "dump";
+  $("f-truck-small").checked = d.truck === "small";
+  const defaultRate = d.truck === "dump" ? b.dumpRate : b.smallRate;
+  const defaultBuf = Math.round((b.dumpTimeMultiplier - 1) * 100);
+  $("f-rate").value = d.rateOverride != null ? d.rateOverride : defaultRate;
+  $("f-buffer").value = d.bufferOverride != null ? d.bufferOverride : defaultBuf;
+  $("dump-rate-label").textContent = `$${b.dumpRate} / hour · +${defaultBuf}% route time · change below for this ticket`;
+  $("small-rate-label").textContent = `$${b.smallRate} / hour · mapped time · change below for this ticket`;
+  $("price-banner").classList.toggle("hidden", !catalogNeedsPrices());
+  const yardSel = $("f-yard");
+  yardSel.innerHTML = db.settings.yards.map((y) =>
+    `<option value="${y.id}" ${y.id === d.yardId ? "selected" : ""}>${y.name} — ${y.address}</option>`
+  ).join("");
+  renderMaterialLines();
+  renderQuoteBox();
+}
+
+function renderMaterialLines() {
+  const wrap = $("material-lines");
+  if (!state.draft.materials.length) {
+    wrap.innerHTML = `<div class="empty">No materials yet. Search the book and add yards / tons / each.</div>`;
+    return;
+  }
+  wrap.innerHTML = `<table><thead><tr><th>Material</th><th>Qty</th><th>Unit</th><th>Price</th><th>Amount</th><th></th></tr></thead><tbody>
+    ${state.draft.materials.map((m, i) => `
+      <tr>
+        <td>${esc(m.name)}<div class="muted">${esc(m.category || "")}</div></td>
+        <td><input type="number" min="0" step="0.25" value="${m.qty}" data-qty="${i}" style="width:90px"></td>
+        <td>${esc(m.unit)}</td>
+        <td>${HDEngine.money(m.price)}</td>
+        <td>${HDEngine.money((Number(m.qty) || 0) * (Number(m.price) || 0))}</td>
+        <td><button class="ghost" data-del="${i}">Remove</button></td>
+      </tr>`).join("")}
+  </tbody></table>`;
+}
+
+function ticketBilling() {
+  const b = { ...db.settings.billing };
+  const rate = Number(state.draft.rateOverride);
+  if (isFinite(rate) && rate > 0) {
+    if (state.draft.truck === "dump") b.dumpRate = rate;
+    else b.smallRate = rate;
+  }
+  const buf = Number(state.draft.bufferOverride);
+  if (isFinite(buf) && buf >= 0) {
+    b.dumpTimeMultiplier = 1 + buf / 100;
+  }
+  return b;
+}
+
+function currentQuote() {
+  const seconds = state.route ? state.route.seconds : 0;
+  return HDEngine.quote({
+    oneWaySeconds: seconds,
+    truck: state.draft.truck,
+    billing: ticketBilling(),
+    materials: state.draft.materials,
+    loads: state.draft.loads,
+    extraMinutes: state.draft.extraMinutes,
+  });
+}
+
+function renderQuoteBox() {
+  const q = currentQuote();
+  state.quote = q;
+  const routed = !!state.route;
+  $("quote-box").innerHTML = `
+    <div class="l muted" style="color:#d9c4a8">Delivery + materials</div>
+    <div class="total">${HDEngine.money(q.total)}</div>
+    <div style="margin-top:8px">${HDEngine.money(q.deliveryFee)} delivery · ${HDEngine.money(q.materialsTotal)} materials</div>
+    <div class="break">${routed ? q.formula : "Punch the delivery address and hit Calculate route to lock time and delivery fee.\nMaterials can be added anytime."}</div>
+    ${state.route ? `<div style="margin-top:10px;font-size:13px">Mapped ${state.route.miles.toFixed(1)} mi one-way via ${state.route.provider === "google" ? "Google" : "OSM / OSRM"}</div>` : ""}
+  `;
+}
+
+async function calculateRoute() {
+  const address = $("f-address").value.trim();
+  if (!address) { toast("Enter the delivery address first"); return; }
+  const yard = yardById($("f-yard").value);
+  $("calc-btn").disabled = true;
+  $("calc-btn").textContent = "Mapping route…";
+  try {
+    const route = await HDMaps.route(yard.address, address, yard, db.settings.maps.googleKey);
+    state.route = route;
+    state.draft.address = address;
+    state.draft.yardId = yard.id;
+    drawMap(route);
+    renderQuoteBox();
+    toast("Route locked");
+  } catch (err) {
+    toast(err.message || "Routing failed");
+  } finally {
+    $("calc-btn").disabled = false;
+    $("calc-btn").textContent = "Calculate route";
+  }
+}
+
+function drawMap(route) {
+  const el = $("map");
+  if (!window.L) return;
+  if (!state.map) {
+    state.map = L.map(el);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap",
+    }).addTo(state.map);
+  }
+  if (state.mapLayer) state.map.removeLayer(state.mapLayer);
+  const group = L.featureGroup();
+  if (route.from) L.marker([route.from.lat, route.from.lng]).addTo(group);
+  if (route.to) L.marker([route.to.lat, route.to.lng]).addTo(group);
+  if (route.geometry) {
+    L.geoJSON(route.geometry, { style: { color: "#6b1518", weight: 4 } }).addTo(group);
+  } else if (route.from && route.to) {
+    L.polyline([[route.from.lat, route.from.lng], [route.to.lat, route.to.lng]], { color: "#6b1518" }).addTo(group);
+  }
+  group.addTo(state.map);
+  state.mapLayer = group;
+  setTimeout(() => {
+    state.map.invalidateSize();
+    if (group.getBounds && group.getBounds().isValid()) state.map.fitBounds(group.getBounds(), { padding: [24, 24] });
+  }, 80);
+}
+
+function collectForm() {
+  state.draft.customer = $("f-customer").value.trim();
+  state.draft.phone = $("f-phone").value.trim();
+  state.draft.email = $("f-email").value.trim();
+  state.draft.deliverOn = $("f-when").value;
+  state.draft.jobName = $("f-job").value.trim();
+  state.draft.address = $("f-address").value.trim();
+  state.draft.notes = $("f-notes").value.trim();
+  state.draft.driver = $("f-driver").value.trim();
+  state.draft.truckUnit = $("f-unit").value.trim();
+  state.draft.po = $("f-po").value.trim();
+  state.draft.yardId = $("f-yard").value;
+  state.draft.truck = $("f-truck-dump").checked ? "dump" : "small";
+  state.draft.loads = Math.max(1, Number($("f-loads").value) || 1);
+  state.draft.extraMinutes = Math.max(0, Number($("f-extra").value) || 0);
+  state.draft.status = $("f-status").value || "open";
+  state.draft.rateOverride = Number($("f-rate").value);
+  state.draft.bufferOverride = Number($("f-buffer").value);
+}
+
+function saveTicket(status) {
+  collectForm();
+  if (!state.draft.customer || !state.draft.address) {
+    toast("Customer and delivery address are required");
+    return null;
+  }
+  const q = currentQuote();
+  const existing = state.draft.id && db.jobs.find((j) => j.id === state.draft.id);
+  const ticket = {
+    ...state.draft,
+    id: state.draft.id || nextTicket(),
+    createdAt: (existing && existing.createdAt) || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    status: status || state.draft.status || "open",
+    quote: q,
+    route: state.route,
+  };
+  const idx = db.jobs.findIndex((j) => j.id === ticket.id);
+  if (idx >= 0) db.jobs[idx] = ticket;
+  else db.jobs.push(ticket);
+  saveStore(db);
+  state.draft = { ...ticket };
+  toast("Saved " + ticket.id);
+  return ticket;
+}
+
+function openTicket(id) {
+  const job = db.jobs.find((j) => j.id === id);
+  if (!job) return;
+  state.draft = JSON.parse(JSON.stringify(job));
+  state.route = job.route || null;
+  state.quote = job.quote || null;
+  show("new");
+  if (state.route) setTimeout(() => drawMap(state.route), 100);
+}
+
+function newTicket() {
+  state.draft = blankDraft();
+  state.route = null;
+  state.quote = null;
+  show("new");
+}
+
+function materialSearch(q) {
+  const s = (q || "").toLowerCase();
+  if (!s) { $("mat-results").innerHTML = ""; return; }
+  const hits = db.settings.materials.filter((m) =>
+    (m.name + " " + m.category).toLowerCase().includes(s)
+  ).slice(0, 12);
+  $("mat-results").innerHTML = hits.map((m) =>
+    `<div data-add="${m.id}"><strong>${esc(m.name)}</strong> · ${HDEngine.money(m.price)} / ${esc(m.unit)}
+     <div class="cat">${esc(m.category)}</div></div>`
+  ).join("") || `<div class="empty">No match — add it under Material Book</div>`;
+}
+
+function addMaterial(id) {
+  const m = db.settings.materials.find((x) => x.id === id);
+  if (!m) return;
+  const qty = Number($("mat-qty").value) || 1;
+  const existing = state.draft.materials.find((x) => x.id === id);
+  if (existing) existing.qty = Number(existing.qty) + qty;
+  else state.draft.materials.push({ id: m.id, name: m.name, category: m.category, unit: m.unit, price: m.price, qty });
+  $("mat-search").value = "";
+  $("mat-results").innerHTML = "";
+  renderMaterialLines();
+  renderQuoteBox();
+}
+
+function renderSettings() {
+  const s = db.settings;
+  $("s-company").value = s.company.name;
+  $("s-email").value = s.company.email;
+  $("s-acct").value = s.company.accountingEmail;
+  $("s-phone").value = s.company.phone;
+  $("s-dump").value = s.billing.dumpRate;
+  $("s-small").value = s.billing.smallRate;
+  $("s-mult").value = Math.round((s.billing.dumpTimeMultiplier - 1) * 100);
+  $("s-trip").value = s.billing.tripMode;
+  $("s-min").value = s.billing.minimumHours;
+  $("s-inc").value = s.billing.incrementMinutes;
+  $("s-load").value = s.billing.loadMinutes;
+  $("s-unload").value = s.billing.unloadMinutes;
+  $("s-pin").value = s.security.pin;
+  $("s-gkey").value = s.maps.googleKey || "";
+  $("yard-editor").innerHTML = s.yards.map((y, i) => `
+    <div class="card" style="box-shadow:none;margin-bottom:10px">
+      <div class="row">
+        <div><label>Yard name</label><input data-y="${i}" data-k="name" value="${escAttr(y.name)}"></div>
+        <div><label>Phone</label><input data-y="${i}" data-k="phone" value="${escAttr(y.phone || "")}"></div>
+      </div>
+      <label>Address</label><input data-y="${i}" data-k="address" value="${escAttr(y.address)}">
+    </div>`).join("");
+}
+
+function saveSettings() {
+  const s = db.settings;
+  s.company.name = $("s-company").value.trim() || s.company.name;
+  s.company.email = $("s-email").value.trim();
+  s.company.accountingEmail = $("s-acct").value.trim();
+  s.company.phone = $("s-phone").value.trim();
+  s.billing.dumpRate = Number($("s-dump").value) || 160;
+  s.billing.smallRate = Number($("s-small").value) || 100;
+  s.billing.dumpTimeMultiplier = 1 + (Number($("s-mult").value) || 8) / 100;
+  s.billing.tripMode = $("s-trip").value;
+  s.billing.minimumHours = Number($("s-min").value) || 1;
+  s.billing.incrementMinutes = Number($("s-inc").value) || 15;
+  s.billing.loadMinutes = Number($("s-load").value) || 0;
+  s.billing.unloadMinutes = Number($("s-unload").value) || 0;
+  s.security.pin = $("s-pin").value.trim() || "1956";
+  s.maps.googleKey = $("s-gkey").value.trim();
+  document.querySelectorAll("[data-y]").forEach((inp) => {
+    const i = Number(inp.dataset.y);
+    const k = inp.dataset.k;
+    if (s.yards[i]) s.yards[i][k] = inp.value;
+  });
+  saveStore(db);
+  toast("Settings saved");
+}
+
+function renderCatalog() {
+  const rows = db.settings.materials.map((m, i) => `
+    <tr>
+      <td><input value="${escAttr(m.name)}" data-c="${i}" data-k="name"></td>
+      <td><input value="${escAttr(m.category)}" data-c="${i}" data-k="category"></td>
+      <td><input value="${escAttr(m.unit)}" data-c="${i}" data-k="unit" style="width:70px"></td>
+      <td><input type="number" step="0.01" value="${m.price}" data-c="${i}" data-k="price" style="width:100px"></td>
+      <td><button class="ghost" data-cd="${i}">Delete</button></td>
+    </tr>`).join("");
+  $("catalog-table").innerHTML = `<table><thead><tr><th>Material</th><th>Category</th><th>Unit</th><th>Price</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function saveCatalog() {
+  document.querySelectorAll("[data-c]").forEach((inp) => {
+    const i = Number(inp.dataset.c);
+    const k = inp.dataset.k;
+    if (!db.settings.materials[i]) return;
+    db.settings.materials[i][k] = k === "price" ? Number(inp.value) || 0 : inp.value;
+  });
+  db.settings.catalogConfirmed = !catalogNeedsPrices();
+  saveStore(db);
+  toast(catalogNeedsPrices() ? "Book saved — some prices are still $0" : "Material book saved");
+}
+
+function addCatalogRow() {
+  db.settings.materials.push({
+    id: "sku-" + Date.now(),
+    name: "New material",
+    category: "Custom",
+    unit: "yd",
+    price: 0,
+  });
+  saveStore(db);
+  renderCatalog();
+}
+
+function printPacket(kind) {
+  const ticket = saveTicket(state.draft.status || "printed");
+  if (!ticket) return;
+  ticket.status = kind === "email" ? ticket.status : "printed";
+  const idx = db.jobs.findIndex((j) => j.id === ticket.id);
+  if (idx >= 0) { db.jobs[idx].status = ticket.status; saveStore(db); }
+  buildPrint(ticket);
+  if (kind === "email") {
+    emailAccounting(ticket);
+    return;
+  }
+  window.print();
+}
+
+function buildPrint(ticket) {
+  const yard = yardById(ticket.yardId);
+  const q = ticket.quote || currentQuote();
+  const co = db.settings.company;
+  const when = new Date(ticket.createdAt || Date.now()).toLocaleString();
+  const matRows = (q.lines || []).map((l) =>
+    `<tr><td>${esc(l.name)}</td><td>${l.qty} ${esc(l.unit)}</td><td>${HDEngine.money(l.price)}</td><td>${HDEngine.money(l.amount)}</td></tr>`
+  ).join("") || `<tr><td colspan="4">No materials</td></tr>`;
+  const steps = ((ticket.route && ticket.route.steps) || []).slice(0, 18)
+    .map((s, i) => `<li>${esc(s.instruction)} <span class="muted">(${s.miles.toFixed(1)} mi)</span></li>`).join("");
+
+  $("print-root").innerHTML = `
+    <section class="sheet">
+      <div class="sheet-head">
+        <div>
+          <h1>${esc(co.name)}</h1>
+          <div>${esc(co.tagline || "")}</div>
+          <div>${esc(co.phone)} · ${esc(co.email)}</div>
+          <div>${esc(yard.name)} — ${esc(yard.address)}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:22px;font-weight:700">INVOICE ${esc(ticket.id)}</div>
+          <div>${when}</div>
+          <div>PO: ${esc(ticket.po || "—")}</div>
+        </div>
+      </div>
+      <div class="row">
+        <div><strong>Bill To</strong><br>${esc(ticket.customer)}<br>${esc(ticket.phone)}<br>${esc(ticket.email || "")}<br>${esc(ticket.jobName)}</div>
+        <div><strong>Deliver To</strong><br>${esc(ticket.address)}<br>Truck: ${ticket.truck === "dump" ? "Dump truck" : "Small truck"} @ ${HDEngine.money(q.rate)}/hr · ${q.loadCount || 1} load(s)<br>Driver / unit: ${esc(ticket.driver || "—")} ${esc(ticket.truckUnit || "")}<br>Deliver on: ${esc(ticket.deliverOn ? ticket.deliverOn.replace("T", " ") : "—")}</div>
+      </div>
+      <h3 style="margin-top:18px">Materials</h3>
+      <table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Amount</th></tr></thead><tbody>${matRows}</tbody></table>
+      <h3 style="margin-top:18px">Delivery</h3>
+      <table>
+        <tr><td>Mapped one-way</td><td>${q.oneWayMin.toFixed(1)} min · ${(ticket.route ? ticket.route.miles : 0).toFixed(1)} mi</td></tr>
+        <tr><td>Trip</td><td>${q.tripFactor === 2 ? "Round trip" : "One way"} × ${q.loadCount || 1} load(s) = ${q.tripMin.toFixed(1)} min</td></tr>
+        <tr><td>Dump-truck time buffer</td><td>${q.isDump ? "Applied × " + Number(q.multiplier).toFixed(2) : "Not applied (small truck)"} → ${q.adjustedDriveMin.toFixed(1)} min</td></tr>
+        <tr><td>Load + unload + extra</td><td>${q.siteMin.toFixed(0)} min</td></tr>
+        <tr><td>Billable time</td><td>${q.billableHours.toFixed(2)} hr @ ${HDEngine.money(q.rate)}/hr</td></tr>
+      </table>
+      <div class="totals-box">
+        Materials ${HDEngine.money(q.materialsTotal)}<br>
+        Delivery ${HDEngine.money(q.deliveryFee)}<br>
+        ${q.tax ? "Tax " + HDEngine.money(q.tax) + "<br>" : ""}
+        <strong style="font-size:22px">Total ${HDEngine.money(q.total)}</strong>
+      </div>
+      <p class="muted">${esc(ticket.notes || "")}</p>
+      <div class="recon">${esc(q.formula || "")}</div>
+      <p class="muted">Private dispatch ticket for Hilton internal billing and driver paperwork. Material prices per current yard book. Oregon — no sales tax unless set in Settings.</p>
+    </section>
+    <section class="sheet">
+      <div class="sheet-head">
+        <div>
+          <h1>DRIVER ROUTE SHEET</h1>
+          <div>${esc(co.name)} · ${esc(ticket.id)}</div>
+        </div>
+        <div style="text-align:right">
+          <div>${when}</div>
+          <div>${ticket.truck === "dump" ? "DUMP TRUCK" : "SMALL TRUCK"}</div>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <strong>Load at</strong><br>${esc(yard.name)}<br>${esc(yard.address)}<br>${esc(yard.phone)}
+        </div>
+        <div>
+          <strong>Deliver to</strong><br>${esc(ticket.customer)} · ${esc(ticket.phone)}<br>${esc(ticket.address)}<br>${esc(ticket.jobName)}<br>Window: ${esc(ticket.deliverOn ? ticket.deliverOn.replace("T", " ") : "—")} · ${q.loadCount || 1} load(s)
+        </div>
+      </div>
+      <h3>Load</h3>
+      <table><thead><tr><th>Material</th><th>Qty</th></tr></thead><tbody>
+        ${(ticket.materials || []).map((m) => `<tr><td>${esc(m.name)}</td><td>${m.qty} ${esc(m.unit)}</td></tr>`).join("") || "<tr><td colspan=2>See dispatcher</td></tr>"}
+      </tbody></table>
+      <p><strong>Notes for driver:</strong> ${esc(ticket.notes || "None")}</p>
+      <p><strong>Route:</strong> ${(ticket.route ? ticket.route.miles.toFixed(1) : "—")} miles one-way.
+         ${q.isDump ? "Dump truck — run easy, 8% time buffer already on the ticket." : ""}
+         Driver: ${esc(ticket.driver || "unassigned")} · Unit ${esc(ticket.truckUnit || "—")}</p>
+      ${steps ? `<ol>${steps}</ol>` : `<p class="muted">Turn-by-turn prints when the OSM router is used. Google Distance Matrix still bills time/miles.</p>`}
+      <div class="sig">
+        <div><div class="line">Driver signature / time out</div></div>
+        <div><div class="line">Customer received by / time in</div></div>
+      </div>
+    </section>`;
+}
+
+function emailAccounting(ticket) {
+  const q = ticket.quote;
+  const yard = yardById(ticket.yardId);
+  const to = db.settings.company.accountingEmail || db.settings.company.email;
+  const subject = `Hilton Dispatch ${ticket.id} — ${ticket.customer} — ${HDEngine.money(q.total)}`;
+  const body = [
+    `HILTON DISPATCH RECONCILIATION — send to Nick`,
+    `Ticket: ${ticket.id}`,
+    `Date: ${ticket.createdAt}`,
+    `Customer: ${ticket.customer}  ${ticket.phone}`,
+    `Job: ${ticket.jobName || ""}`,
+    `Deliver to: ${ticket.address}`,
+    `Origin yard: ${yard.name} — ${yard.address}`,
+    `Truck: ${ticket.truck === "dump" ? "Dump" : "Small"} @ ${HDEngine.money(q.rate)}/hr × ${q.loadCount || 1} load(s)`,
+    `Driver / unit: ${ticket.driver || "—"} / ${ticket.truckUnit || "—"}`,
+    `PO: ${ticket.po || "—"}`,
+    ``,
+    q.formula,
+    ``,
+    `Materials:`,
+    ...(q.lines || []).map((l) => `  - ${l.qty} ${l.unit} ${l.name} @ ${HDEngine.money(l.price)} = ${HDEngine.money(l.amount)}`),
+    ``,
+    `TOTAL DUE: ${HDEngine.money(q.total)}`,
+    ``,
+    `Notes: ${ticket.notes || "none"}`,
+  ].join("\n");
+  ticket.status = "sent";
+  const idx = db.jobs.findIndex((j) => j.id === ticket.id);
+  if (idx >= 0) { db.jobs[idx].status = "sent"; saveStore(db); }
+  const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.location.href = mailto;
+  toast("Opened email to accounting");
+}
+
+function exportCsv() {
+  const rows = [["ticket", "date", "customer", "phone", "address", "yard", "truck", "hours", "delivery", "materials", "total", "status"]];
+  db.jobs.forEach((j) => {
+    const y = yardById(j.yardId);
+    rows.push([
+      j.id, j.createdAt, j.customer, j.phone, j.address, y && y.name, j.truck,
+      j.quote && j.quote.billableHours, j.quote && j.quote.deliveryFee, j.quote && j.quote.materialsTotal, j.quote && j.quote.total, j.status
+    ]);
+  });
+  const csv = rows.map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  download("hilton-dispatch-jobs.csv", csv, "text/csv");
+}
+
+function exportJson() {
+  download("hilton-dispatch-backup.json", JSON.stringify(db, null, 2), "application/json");
+}
+
+function download(name, text, type) {
+  const blob = new Blob([text], { type });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+}
+function escAttr(s) {
+  return String(s ?? "").replace(/[&"<>]/g, (c) => ({ "&": "&amp;", '"': "&quot;", "<": "&lt;", ">": "&gt;" }[c]));
+}
+
+function seedPreview() {
+  if (db.jobs.length) return;
+  const when = new Date().toISOString();
+  const materials = [
+    { id: "topsoil", name: "Topsoil", category: "Soils", unit: "yd", price: 25, qty: 8 },
+    { id: "fresh-fines", name: "Fresh Fines Bark", category: "Bark", unit: "yd", price: 34, qty: 4 },
+  ];
+  const quote = HDEngine.quote({
+    oneWaySeconds: 18 * 60,
+    truck: "dump",
+    billing: db.settings.billing,
+    materials,
+    loads: 1,
+    extraMinutes: 0,
+  });
+  db.jobs.push({
+    id: "HD-2026-0001",
+    createdAt: when,
+    updatedAt: when,
+    status: "open",
+    customer: "Rogue Valley Landscaping",
+    phone: "541-555-0142",
+    email: "",
+    jobName: "Oak Street driveway",
+    address: "214 Oak St, Medford, OR 97501",
+    notes: "Dump at the end of the drive. Call 10 minutes out. Stay off new asphalt.",
+    yardId: "cp",
+    truck: "dump",
+    driver: "Carlos",
+    truckUnit: "DT-12",
+    po: "RV-4418",
+    loads: 1,
+    extraMinutes: 0,
+    materials,
+    quote,
+    route: { provider: "osrm", seconds: 18 * 60, miles: 8.4, from: { lat: 42.3916, lng: -122.9124 }, to: { lat: 42.3266, lng: -122.8756 } },
+  });
+  saveStore(db);
+}
+
+function onReady() {
+  bindPin();
+  $("login-btn").addEventListener("click", attemptLogin);
+  if (location.search.indexOf("preview=1") >= 0) {
+    try { seedPreview(); } catch (e) { console.warn(e); }
+    unlock();
+    const view = (new URLSearchParams(location.search).get("view") || "board");
+    if (view === "new" && db.jobs[0]) openTicket(db.jobs[0].id);
+    else show(view === "new" ? "new" : view);
+  }
+  document.querySelectorAll(".nav button").forEach((b) => b.addEventListener("click", () => {
+    if (b.dataset.go === "new") newTicket();
+    else show(b.dataset.go);
+  }));
+  $("logout").addEventListener("click", lock);
+  $("board-search").addEventListener("input", (e) => { state.filter = e.target.value; renderBoard(); });
+  $("export-csv").addEventListener("click", exportCsv);
+  $("calc-btn").addEventListener("click", calculateRoute);
+  $("save-btn").addEventListener("click", () => saveTicket("open"));
+  $("print-inv").addEventListener("click", () => printPacket("print"));
+  $("email-acct").addEventListener("click", () => printPacket("email"));
+  $("f-truck-dump").addEventListener("change", () => {
+    state.draft.truck = "dump";
+    $("f-rate").value = db.settings.billing.dumpRate;
+    state.draft.rateOverride = db.settings.billing.dumpRate;
+    renderQuoteBox();
+  });
+  $("f-truck-small").addEventListener("change", () => {
+    state.draft.truck = "small";
+    $("f-rate").value = db.settings.billing.smallRate;
+    state.draft.rateOverride = db.settings.billing.smallRate;
+    renderQuoteBox();
+  });
+  $("f-rate").addEventListener("input", () => {
+    state.draft.rateOverride = Number($("f-rate").value);
+    renderQuoteBox();
+  });
+  $("f-buffer").addEventListener("input", () => {
+    state.draft.bufferOverride = Number($("f-buffer").value);
+    renderQuoteBox();
+  });
+  $("f-yard").addEventListener("change", () => { state.draft.yardId = $("f-yard").value; });
+  $("f-loads").addEventListener("input", () => { state.draft.loads = Math.max(1, Number($("f-loads").value) || 1); renderQuoteBox(); });
+  $("f-extra").addEventListener("input", () => { state.draft.extraMinutes = Math.max(0, Number($("f-extra").value) || 0); renderQuoteBox(); });
+  $("f-address").addEventListener("input", (e) => {
+    const box = $("addr-suggest");
+    HDMaps.debounceSuggest(e.target.value, (hits) => {
+      if (!hits.length) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+      box.classList.remove("hidden");
+      box.innerHTML = hits.map((h) => `<div data-addr="${escAttr(h.label)}">${esc(h.label)}</div>`).join("");
+    });
+  });
+  $("addr-suggest").addEventListener("click", (e) => {
+    const row = e.target.closest("[data-addr]");
+    if (!row) return;
+    $("f-address").value = row.dataset.addr;
+    $("addr-suggest").classList.add("hidden");
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".addr-wrap")) $("addr-suggest").classList.add("hidden");
+  });
+  $("mat-search").addEventListener("input", (e) => materialSearch(e.target.value));
+  $("mat-add-btn").addEventListener("click", () => {
+    const first = document.querySelector("#mat-results [data-add]");
+    if (first) addMaterial(first.dataset.add);
+  });
+  $("mat-results").addEventListener("click", (e) => {
+    const row = e.target.closest("[data-add]");
+    if (row) addMaterial(row.dataset.add);
+  });
+  $("material-lines").addEventListener("input", (e) => {
+    if (e.target.dataset.qty != null) {
+      const i = Number(e.target.dataset.qty);
+      state.draft.materials[i].qty = Number(e.target.value) || 0;
+      renderQuoteBox();
+    }
+  });
+  $("material-lines").addEventListener("click", (e) => {
+    if (e.target.dataset.del != null) {
+      state.draft.materials.splice(Number(e.target.dataset.del), 1);
+      renderMaterialLines();
+      renderQuoteBox();
+    }
+  });
+  $("job-table").addEventListener("click", (e) => {
+    const st = e.target.closest("[data-st]");
+    if (st) {
+      e.stopPropagation();
+      const [id, status] = st.dataset.st.split("|");
+      const job = db.jobs.find((j) => j.id === id);
+      if (job) { job.status = status; job.updatedAt = new Date().toISOString(); saveStore(db); renderBoard(); toast(id + " → " + status); }
+      return;
+    }
+    const dup = e.target.closest("[data-dup]");
+    if (dup) {
+      e.stopPropagation();
+      const job = db.jobs.find((j) => j.id === dup.dataset.dup);
+      if (!job) return;
+      state.draft = { ...JSON.parse(JSON.stringify(job)), id: null, createdAt: null, status: "open" };
+      state.route = job.route || null;
+      state.quote = job.quote || null;
+      show("new");
+      toast("Copied " + job.id + " — save to issue a new ticket number");
+      return;
+    }
+    const row = e.target.closest("[data-open]");
+    if (row) openTicket(row.dataset.open);
+  });
+  $("save-settings").addEventListener("click", saveSettings);
+  $("save-catalog").addEventListener("click", saveCatalog);
+  $("add-catalog").addEventListener("click", addCatalogRow);
+  $("reload-sheet").addEventListener("click", () => {
+    if (!confirm("Replace the material book with the Aug 26, 2026 store price sheet? Custom rows you added will be removed.")) return;
+    db.settings.materials = JSON.parse(JSON.stringify(HD_DEFAULTS.materials));
+    db.settings.priceSheet = HD_DEFAULTS.priceSheet;
+    db.settings.catalogConfirmed = true;
+    saveStore(db);
+    renderCatalog();
+    toast("2026 price sheet loaded");
+  });
+  $("test-google").addEventListener("click", async () => {
+    const key = $("s-gkey").value.trim();
+    if (!key) { toast("Paste a Google Maps API key first"); return; }
+    db.settings.maps.googleKey = key;
+    saveStore(db);
+    $("test-google").disabled = true;
+    $("test-google").textContent = "Testing Google…";
+    try {
+      const from = db.settings.yards[0];
+      const to = db.settings.yards[1] || db.settings.yards[0];
+      const route = await HDMaps.route(from.address, to.address, from, key);
+      if (route.provider !== "google") throw new Error("Google did not answer — check the key and that Maps JavaScript, Directions, and Geocoding are enabled.");
+      toast("Google Maps live · " + route.miles.toFixed(1) + " mi " + from.name + " → " + to.name);
+    } catch (err) {
+      toast(err.message || "Google key failed");
+    } finally {
+      $("test-google").disabled = false;
+      $("test-google").textContent = "Test Google key";
+    }
+  });
+  $("catalog-table").addEventListener("click", (e) => {
+    if (e.target.dataset.cd != null) {
+      db.settings.materials.splice(Number(e.target.dataset.cd), 1);
+      saveStore(db);
+      renderCatalog();
+    }
+  });
+  $("export-json").addEventListener("click", exportJson);
+  $("import-json").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      if (!data.settings || !Array.isArray(data.jobs)) throw new Error("bad file");
+      db = data;
+      saveStore(db);
+      toast("Backup restored");
+      renderSettings();
+      renderCatalog();
+    } catch (err) {
+      toast("Could not read that backup");
+    }
+  });
+}
+
+document.addEventListener("DOMContentLoaded", onReady);
+window.HDApp = { show, newTicket, openTicket, saveTicket, printPacket };
+
+</script>
+</body>
+</html>

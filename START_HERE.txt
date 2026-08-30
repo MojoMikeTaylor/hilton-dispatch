@@ -1,0 +1,26 @@
+HILTON DISPATCH — open this on a yard computer
+
+1. Double-click index.html
+   or run ./serve.sh and go to http://127.0.0.1:8756
+
+2. PIN is 1956. Change it in Settings.
+
+3. Material Book is the Aug 26, 2026 store price sheet (real yard prices).
+   Rock sold by the pound on that sheet stays per lb. Change a price if the yard moves.
+
+4. Settings — confirm:
+   Dump truck $160/hr
+   Small truck $100/hr
+   Dump-truck extra time 8%
+   Round trip (out and back)
+   Nick / dispatch email = dispatch@hiltonlandscaping.com
+   Optional: paste Google Maps API key and hit Test Google key
+
+5. New ticket:
+   Customer calls → punch address → pick the yard loading the truck
+   → dump or small → adjust this-ticket rate or buffer if needed
+   → add materials → Calculate route
+   → Print invoice + route sheet
+   → Email Nick / dispatch
+
+Tickets stay in this browser. Download a backup from Settings at the end of the day.
