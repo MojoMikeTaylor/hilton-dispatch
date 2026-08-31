@@ -6,6 +6,50 @@ window.HDMaps = {
   lastRoute: null,
   _googleLoading: null,
   _suggestTimer: null,
+  hoverSuggest: false,
+
+  OR_VIEWBOX: "-124.6,46.3,-116.5,41.98",
+  ROGUE_CENTER: { lat: 42.35, lng: -122.87 },
+  ROGUE_RADIUS_M: 80 * 1609.34,
+
+  oregonizeQuery(query) {
+    const q = (query || "").trim();
+    if (!q) return q;
+    if (/\b(or|oregon)\b/i.test(q)) return q;
+    return q + " Oregon";
+  },
+
+  typedHouseNumber(query) {
+    const m = String(query || "").trim().match(/^(\d+[A-Za-z]?)\b/);
+    return m ? m[1] : "";
+  },
+
+  labelHasHouseNumber(label, num) {
+    const text = String(label || "");
+    if (num) {
+      return new RegExp("(^|\\s)" + String(num).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b").test(text);
+    }
+    return /^\s*\d+/.test(text);
+  },
+
+  keepHouseNumber(typed, suggestion) {
+    const label = String(suggestion || "").trim();
+    const num = this.typedHouseNumber(typed);
+    if (!num) return label;
+    if (this.labelHasHouseNumber(label, num)) return label;
+    return num + " " + label.replace(/^\s+/, "");
+  },
+
+  preferStreetNumber(hits, typed) {
+    const num = this.typedHouseNumber(typed);
+    const list = (hits || []).slice();
+    list.sort((a, b) => {
+      const aN = this.labelHasHouseNumber(a.label, num) ? 0 : 1;
+      const bN = this.labelHasHouseNumber(b.label, num) ? 0 : 1;
+      return aN - bN;
+    });
+    return list;
+  },
 
   async ensureGoogle(key) {
     if (!key) return false;
@@ -30,9 +74,11 @@ window.HDMaps = {
   },
 
   geocodeNominatim(address) {
+    const q = this.oregonizeQuery(address);
     const url =
-      "https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&countrycodes=us&q=" +
-      encodeURIComponent(address);
+      "https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&countrycodes=us" +
+      "&viewbox=" + encodeURIComponent(this.OR_VIEWBOX) +
+      "&bounded=1&q=" + encodeURIComponent(q);
     return fetch(url, { headers: { Accept: "application/json" } }).then((res) => {
       if (!res.ok) throw new Error("Geocoder unavailable (" + res.status + ")");
       return res.json();
@@ -43,26 +89,34 @@ window.HDMaps = {
   },
 
   suggestNominatim(query) {
-    const q = (query || "").trim();
-    if (q.length < 4) return Promise.resolve([]);
+    const raw = (query || "").trim();
+    if (raw.length < 3) return Promise.resolve([]);
+    const q = this.oregonizeQuery(raw);
     const url =
-      "https://nominatim.openstreetmap.org/search?format=json&limit=6&addressdetails=1&countrycodes=us&q=" +
-      encodeURIComponent(q);
+      "https://nominatim.openstreetmap.org/search?format=json&limit=8&addressdetails=1&countrycodes=us" +
+      "&viewbox=" + encodeURIComponent(this.OR_VIEWBOX) +
+      "&bounded=1&q=" + encodeURIComponent(q);
     return fetch(url, { headers: { Accept: "application/json" } })
       .then((res) => (res.ok ? res.json() : []))
-      .then((data) => (data || []).map((hit) => ({
+      .then((data) => this.preferStreetNumber((data || []).map((hit) => ({
         label: hit.display_name,
         lat: parseFloat(hit.lat),
         lng: parseFloat(hit.lon),
-      })))
+      })), raw))
       .catch(() => []);
   },
 
   debounceSuggest(query, cb, googleKey) {
     clearTimeout(this._suggestTimer);
+    const q = (query || "").trim();
+    if (q.length < 3) {
+      cb([]);
+      return;
+    }
     this._suggestTimer = setTimeout(() => {
+      if (this.hoverSuggest) return;
       this.suggestAddress(query, googleKey).then(cb);
-    }, 280);
+    }, 300);
   },
 
   async suggestAddress(query, googleKey) {
@@ -72,13 +126,13 @@ window.HDMaps = {
     if (key) {
       try {
         const viaServer = await this.suggestPlacesNew(q, key);
-        if (viaServer.length) return viaServer;
+        if (viaServer.length) return this.preferStreetNumber(viaServer, q);
       } catch (e) { /* fall through */ }
       try {
         const ready = await this.ensureGoogle(key);
         if (ready) {
           const jsHits = await this.suggestGoogleJs(q);
-          if (jsHits.length) return jsHits;
+          if (jsHits.length) return this.preferStreetNumber(jsHits, q);
         }
       } catch (e) { /* fall through */ }
     }
@@ -89,7 +143,7 @@ window.HDMaps = {
     return fetch("/api/places", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ input: query, key }),
+      body: JSON.stringify({ input: this.oregonizeQuery(query), key }),
     }).then((res) => (res.ok ? res.json() : { suggestions: [] }))
       .then((data) => data.suggestions || [])
       .catch(() => []);
@@ -102,15 +156,27 @@ window.HDMaps = {
         return;
       }
       const svc = new google.maps.places.AutocompleteService();
+      const center = new google.maps.LatLng(this.ROGUE_CENTER.lat, this.ROGUE_CENTER.lng);
       svc.getPlacePredictions({
-        input: query,
+        input: this.oregonizeQuery(query),
+        types: ["address"],
         componentRestrictions: { country: "us" },
+        location: center,
+        radius: this.ROGUE_RADIUS_M,
+        locationBias: {
+          radius: this.ROGUE_RADIUS_M,
+          center,
+        },
       }, (preds, status) => {
         if (status !== google.maps.places.PlacesServiceStatus.OK || !preds) {
           resolve([]);
           return;
         }
-        resolve(preds.map((p) => ({ label: p.description, placeId: p.place_id })));
+        resolve(preds.map((p) => ({
+          label: p.description,
+          placeId: p.place_id,
+          main: p.structured_formatting && p.structured_formatting.main_text,
+        })));
       });
     });
   },
@@ -153,7 +219,15 @@ window.HDMaps = {
   geocodeGoogle(address) {
     return new Promise((resolve, reject) => {
       const geocoder = new google.maps.Geocoder();
-      geocoder.geocode({ address, componentRestrictions: { country: "US" } }, (results, status) => {
+      geocoder.geocode({
+        address: this.oregonizeQuery(address),
+        componentRestrictions: { country: "US", administrativeArea: "Oregon" },
+        bounds: new google.maps.LatLngBounds(
+          { lat: 42.35 - 1.15, lng: -122.87 - 1.5 },
+          { lat: 42.35 + 1.15, lng: -122.87 + 1.5 }
+        ),
+        region: "us",
+      }, (results, status) => {
         if (status === "OK" && results[0]) {
           const loc = results[0].geometry.location;
           resolve({ lat: loc.lat(), lng: loc.lng(), label: results[0].formatted_address });

@@ -144,8 +144,10 @@ const server = http.createServer(async (req, res) => {
         body: JSON.stringify({
           input,
           includedRegionCodes: ["us"],
+          regionCode: "US",
+          includedPrimaryTypes: ["street_address", "premise", "subpremise"],
           locationBias: {
-            circle: { center: { latitude: 42.39, longitude: -122.91 }, radius: 80000 },
+            circle: { center: { latitude: 42.35, longitude: -122.87 }, radius: 128747 },
           },
         }),
       });

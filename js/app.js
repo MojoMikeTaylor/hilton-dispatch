@@ -1254,22 +1254,35 @@ async function onReady() {
     state.catalogBook = btn.dataset.book;
     renderCatalog();
   });
+  function applyAddressPick(suggestion) {
+    $("f-address").value = HDMaps.keepHouseNumber($("f-address").value, suggestion);
+    $("addr-suggest").classList.add("hidden");
+    $("addr-suggest").innerHTML = "";
+    HDMaps.hoverSuggest = false;
+  }
   $("f-address").addEventListener("input", (e) => {
     const box = $("addr-suggest");
+    if (HDMaps.hoverSuggest) return;
     HDMaps.debounceSuggest(e.target.value, (hits) => {
+      if (HDMaps.hoverSuggest) return;
       if (!hits.length) { box.classList.add("hidden"); box.innerHTML = ""; return; }
       box.classList.remove("hidden");
       box.innerHTML = hits.map((h) => `<div data-addr="${escAttr(h.label)}">${esc(h.label)}</div>`).join("");
     }, db.settings.maps.googleKey);
   });
-  $("addr-suggest").addEventListener("click", (e) => {
+  $("addr-suggest").addEventListener("mouseenter", () => { HDMaps.hoverSuggest = true; });
+  $("addr-suggest").addEventListener("mouseleave", () => { HDMaps.hoverSuggest = false; });
+  $("addr-suggest").addEventListener("mousedown", (e) => {
     const row = e.target.closest("[data-addr]");
     if (!row) return;
-    $("f-address").value = row.dataset.addr;
-    $("addr-suggest").classList.add("hidden");
+    e.preventDefault();
+    applyAddressPick(row.dataset.addr);
   });
   document.addEventListener("click", (e) => {
-    if (!e.target.closest(".addr-wrap")) $("addr-suggest").classList.add("hidden");
+    if (!e.target.closest(".addr-wrap")) {
+      $("addr-suggest").classList.add("hidden");
+      HDMaps.hoverSuggest = false;
+    }
   });
   $("mat-search").addEventListener("input", (e) => materialSearch(e.target.value));
   $("mat-add-btn").addEventListener("click", () => {
