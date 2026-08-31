@@ -17,6 +17,7 @@ const state = {
   serverReady: false,
   book: "store",
   catalogBook: "store",
+  boardView: "live",
 };
 
 function blankDraft() {
@@ -85,6 +86,24 @@ function normalizeStore(data) {
 function normalizeStatus(s) {
   const map = { open: "new", sent: "emailed", delivered: "done" };
   return map[s] || s || "new";
+}
+
+function isQuoteStatus(s) {
+  return normalizeStatus(s) === "quote";
+}
+
+function isOffBoard(s) {
+  const st = normalizeStatus(s);
+  return st === "quote" || st === "void";
+}
+
+function matchesBoardView(j) {
+  const st = normalizeStatus(j.status);
+  const view = state.boardView || "live";
+  if (view === "all") return true;
+  if (view === "quotes") return st === "quote";
+  if (view === "parked") return st === "done" || st === "void";
+  return st !== "quote" && st !== "void" && st !== "done";
 }
 
 function catalogNeedsPricesFrom(materials) {
@@ -305,26 +324,35 @@ function bindPin() {
 }
 
 function renderBoard() {
+  document.querySelectorAll("#board-filters [data-board]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.board === (state.boardView || "live"));
+  });
   const jobs = db.jobs.slice().reverse();
   const q = (state.filter || "").toLowerCase();
-  const list = q
+  const searched = q
     ? jobs.filter((j) => JSON.stringify(j).toLowerCase().includes(q))
     : jobs;
+  const list = searched.filter(matchesBoardView);
   const today = new Date().toISOString().slice(0, 10);
   const isToday = (j) => {
     const a = (j.deliverOn || j.createdAt || "").slice(0, 10);
     return a === today;
   };
-  const todays = jobs.filter(isToday);
-  const open = jobs.filter((j) => ["new", "routed", "printed", "emailed", "out", "open"].indexOf(j.status) >= 0);
-  const billed = todays.reduce((s, j) => s + ((j.quote && j.quote.total) || 0), 0);
+  const liveToday = jobs.filter((j) => isToday(j) && !isOffBoard(j.status));
+  const open = jobs.filter((j) => ["new", "routed", "printed", "emailed", "out", "open"].indexOf(normalizeStatus(j.status)) >= 0);
+  const billed = liveToday.reduce((s, j) => s + ((j.quote && j.quote.total) || 0), 0);
 
-  $("kpi-today").textContent = String(todays.length);
+  $("kpi-today").textContent = String(liveToday.length);
   $("kpi-open").textContent = String(open.length);
   $("kpi-total").textContent = HDEngine.money(billed);
 
   if (!list.length) {
-    $("job-table").innerHTML = `<div class="empty">No tickets yet. Take the call, punch the address, build the ticket.</div>`;
+    const empty = (state.boardView === "quotes")
+      ? "No quotes parked. Check Quote only on a ticket when the customer is just asking for a number."
+      : (state.boardView === "parked")
+        ? "No done or voided tickets in this list."
+        : "No live deliveries. Quotes and voids are under the other board tabs.";
+    $("job-table").innerHTML = `<div class="empty">${empty}</div>`;
     return;
   }
   $("job-table").innerHTML = `
@@ -333,22 +361,33 @@ function renderBoard() {
         <th>Ticket</th><th>Customer</th><th>Yard</th><th>Truck</th><th>Window</th><th>Total</th><th>Status</th><th></th>
       </tr></thead>
       <tbody>
-        ${list.map((j) => `
+        ${list.map((j) => {
+          const st = normalizeStatus(j.status);
+          const actions = st === "quote"
+            ? `<button class="ghost" data-open="${j.id}">Open</button>
+               <button class="ghost" data-st="${j.id}|new">Book it</button>
+               <button class="ghost" data-del-job="${j.id}">Delete</button>`
+            : st === "void"
+            ? `<button class="ghost" data-open="${j.id}">Open</button>
+               <button class="ghost" data-st="${j.id}|new">Restore</button>
+               <button class="ghost" data-del-job="${j.id}">Delete</button>`
+            : `<button class="ghost" data-open="${j.id}">Open</button>
+               <button class="ghost" data-dup="${j.id}">Copy</button>
+               <button class="ghost" data-st="${j.id}|out">Out</button>
+               <button class="ghost" data-st="${j.id}|done">Done</button>
+               <button class="ghost" data-st="${j.id}|void">Void</button>`;
+          return `
           <tr class="clickable" data-open="${j.id}">
             <td><strong>${j.id}</strong><div class="muted">${(j.createdAt || "").replace("T", " ").slice(0, 16)}</div></td>
-            <td>${esc(j.customer) || "—"}${j.quarryDirect || isQuarryYard(j.yardId) ? `<div class="muted">Willow Creek — truckload</div>` : ""}<div class="muted">${esc(j.address)}</div></td>
+            <td>${esc(j.customer) || "—"}${st === "quote" ? `<div class="muted">Quote</div>` : ""}${j.quarryDirect || isQuarryYard(j.yardId) ? `<div class="muted">Willow Creek — truckload</div>` : ""}<div class="muted">${esc(j.address)}</div></td>
             <td>${esc((yardById(j.yardId) || {}).name || "")}</td>
             <td><span class="badge ${j.truck}">${truckLabel(j.truck)}</span></td>
             <td>${esc((j.deliverOn || "").replace("T", " "))}</td>
             <td>${j.quote ? HDEngine.money(j.quote.total) : "—"}</td>
-            <td><span class="badge ${j.status}">${esc(j.status)}</span></td>
-            <td class="actions">
-              <button class="ghost" data-open="${j.id}">Open</button>
-              <button class="ghost" data-dup="${j.id}">Copy</button>
-              <button class="ghost" data-st="${j.id}|out">Out</button>
-              <button class="ghost" data-st="${j.id}|done">Done</button>
-            </td>
-          </tr>`).join("")}
+            <td><span class="badge ${st}">${esc(st)}</span></td>
+            <td class="actions">${actions}</td>
+          </tr>`;
+        }).join("")}
       </tbody>
     </table>`;
 }
@@ -459,6 +498,7 @@ function renderForm() {
   $("f-wait-min").value = d.extraWaitMinutes || 0;
   $("f-forklift-fee").value = d.forkliftFee || 0;
   $("f-status").value = normalizeStatus(d.status);
+  if ($("f-quote")) $("f-quote").checked = isQuoteStatus(d.status);
   const truck = d.truck || "dump";
   $("f-truck-dump").checked = truck === "dump";
   $("f-truck-small").checked = truck === "small";
@@ -649,10 +689,43 @@ function collectForm() {
   state.draft.extraWaitMinutes = Math.max(0, Number($("f-wait-min").value) || 0);
   state.draft.extraMinutes = state.draft.extraSiteMinutes + state.draft.extraWaitMinutes;
   state.draft.forkliftFee = Math.max(0, Number($("f-forklift-fee").value) || 0);
-  state.draft.status = normalizeStatus($("f-status").value);
+  if ($("f-quote") && $("f-quote").checked) state.draft.status = "quote";
+  else {
+    const st = normalizeStatus($("f-status").value);
+    state.draft.status = st === "quote" ? "new" : st;
+  }
   state.draft.adminRate = !!($("f-admin-rate") && $("f-admin-rate").checked);
   state.draft.rateOverride = state.draft.adminRate ? Number($("f-rate").value) : null;
   state.draft.quarryDirect = isQuarryYard(state.draft.yardId);
+}
+
+function voidTicket() {
+  const ticket = saveTicket("void");
+  if (!ticket) return;
+  toast(ticket.id + " voided — off the live board");
+  show("board");
+}
+
+function deleteTicket() {
+  collectForm();
+  const id = state.draft.id;
+  if (!id) {
+    state.draft = blankDraft();
+    state.route = null;
+    state.quote = null;
+    show("board");
+    toast("Cleared unsaved ticket");
+    return;
+  }
+  if (!confirm("Delete " + id + " for good? Void keeps a record. Delete is for quotes and mishaps only.")) return;
+  const idx = db.jobs.findIndex((j) => j.id === id);
+  if (idx >= 0) db.jobs.splice(idx, 1);
+  saveStore(db, true);
+  state.draft = blankDraft();
+  state.route = null;
+  state.quote = null;
+  toast("Deleted " + id);
+  show("board");
 }
 
 function saveTicket(status) {
@@ -871,9 +944,11 @@ function addCatalogRow() {
 }
 
 function printPacket(kind) {
-  const ticket = saveTicket(kind === "email" ? "emailed" : "printed");
+  collectForm();
+  const keepQuote = isQuoteStatus(state.draft.status);
+  const ticket = saveTicket(keepQuote ? "quote" : (kind === "email" ? "emailed" : "printed"));
   if (!ticket) return;
-  ticket.status = kind === "email" ? "emailed" : "printed";
+  if (!keepQuote) ticket.status = kind === "email" ? "emailed" : "printed";
   const idx = db.jobs.findIndex((j) => j.id === ticket.id);
   if (idx >= 0) { db.jobs[idx].status = ticket.status; saveStore(db, true); }
   buildPrint(ticket);
@@ -911,7 +986,7 @@ function buildPrint(ticket) {
           ${quarry ? `<div><strong>Quarry direct — truckload</strong></div>` : ""}
         </div>
         <div style="text-align:right">
-          <div style="font-size:22px;font-weight:700">INVOICE ${esc(ticket.id)}</div>
+          <div style="font-size:22px;font-weight:700">${isQuoteStatus(ticket.status) ? "QUOTE" : "INVOICE"} ${esc(ticket.id)}</div>
           <div>${when}</div>
           <div>PO: ${esc(ticket.po || "—")}</div>
         </div>
@@ -985,9 +1060,12 @@ function emailAccounting(ticket) {
   const yard = yardById(ticket.yardId);
   const to = db.settings.company.accountingEmail || db.settings.company.email;
   const quarry = ticket.quarryDirect || isQuarryYard(ticket.yardId);
-  const subject = `Hilton Dispatch ${ticket.id} — ${ticket.customer} — ${HDEngine.money(q.total)}`;
+  const quoting = isQuoteStatus(ticket.status);
+  const subject = quoting
+    ? `Hilton Dispatch QUOTE ${ticket.id} — ${ticket.customer} — ${HDEngine.money(q.total)}`
+    : `Hilton Dispatch ${ticket.id} — ${ticket.customer} — ${HDEngine.money(q.total)}`;
   const body = [
-    `HILTON DISPATCH RECONCILIATION — send to Nick`,
+    quoting ? `HILTON DISPATCH QUOTE — not a live delivery` : `HILTON DISPATCH RECONCILIATION — send to Nick`,
     `Ticket: ${ticket.id}`,
     quarry ? `Label: Quarry direct — truckload` : null,
     `Date: ${ticket.createdAt}`,
@@ -1012,9 +1090,11 @@ function emailAccounting(ticket) {
     ``,
     `Notes: ${ticket.notes || "none"}`,
   ].filter((line) => line !== null).join("\n");
-  ticket.status = "emailed";
-  const idx = db.jobs.findIndex((j) => j.id === ticket.id);
-  if (idx >= 0) { db.jobs[idx].status = "emailed"; saveStore(db, true); }
+  if (!quoting) {
+    ticket.status = "emailed";
+    const idx = db.jobs.findIndex((j) => j.id === ticket.id);
+    if (idx >= 0) { db.jobs[idx].status = "emailed"; saveStore(db, true); }
+  }
   const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   window.location.href = mailto;
   toast("Opened email to accounting");
@@ -1121,6 +1201,23 @@ async function onReady() {
   $("export-csv").addEventListener("click", exportCsv);
   $("calc-btn").addEventListener("click", calculateRoute);
   $("save-btn").addEventListener("click", () => saveTicket());
+  $("void-btn").addEventListener("click", voidTicket);
+  $("delete-btn").addEventListener("click", deleteTicket);
+  $("f-quote").addEventListener("change", () => {
+    if ($("f-quote").checked) {
+      $("f-status").value = "quote";
+      state.draft.status = "quote";
+    } else if (normalizeStatus($("f-status").value) === "quote") {
+      $("f-status").value = "new";
+      state.draft.status = "new";
+    }
+  });
+  $("board-filters").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-board]");
+    if (!btn) return;
+    state.boardView = btn.dataset.board;
+    renderBoard();
+  });
   $("print-inv").addEventListener("click", () => printPacket("print"));
   $("email-acct").addEventListener("click", () => printPacket("email"));
   $("f-truck-dump").addEventListener("change", () => setTruck("dump"));
@@ -1195,6 +1292,18 @@ async function onReady() {
     }
   });
   $("job-table").addEventListener("click", (e) => {
+    const del = e.target.closest("[data-del-job]");
+    if (del) {
+      e.stopPropagation();
+      const id = del.dataset.delJob;
+      if (!confirm("Delete " + id + " for good?")) return;
+      const idx = db.jobs.findIndex((j) => j.id === id);
+      if (idx >= 0) db.jobs.splice(idx, 1);
+      saveStore(db, true);
+      renderBoard();
+      toast("Deleted " + id);
+      return;
+    }
     const st = e.target.closest("[data-st]");
     if (st) {
       e.stopPropagation();

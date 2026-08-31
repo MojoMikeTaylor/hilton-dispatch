@@ -158,8 +158,13 @@ tr.clickable:hover { background: #faf4ea; }
 .badge.small { background: #203326; color: #d5ecd8; }
 .badge.forklift { background: #1e2f4a; color: #d7e4f7; }
 .badge.open { background: #efe0b8; color: #6a4b10; }
-.badge.sent { background: #d7eadb; color: #1e5a32; }
+.badge.new, .badge.routed { background: #efe0b8; color: #6a4b10; }
+.badge.sent, .badge.emailed { background: #d7eadb; color: #1e5a32; }
 .badge.printed { background: #e4d7c6; color: #5a4030; }
+.badge.out { background: #dbe7f4; color: #1e3a5f; }
+.badge.done { background: #d7eadb; color: #1e5a32; }
+.badge.quote { background: #e8ddf4; color: #4a2d6b; }
+.badge.void { background: #eadada; color: #6b1518; }
 
 .truck-pick { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 .truck-pick label.choice {

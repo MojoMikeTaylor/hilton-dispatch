@@ -60,6 +60,12 @@
             <h2>Dispatch board</h2>
             <div class="btn-row" style="margin:0">
               <input id="board-search" type="text" placeholder="Search customer, address, ticket…" style="min-width:240px" />
+              <div id="board-filters" class="book-tabs" style="margin:0">
+                <button type="button" data-board="live" class="active">Live deliveries</button>
+                <button type="button" data-board="quotes">Quotes</button>
+                <button type="button" data-board="parked">Done / void</button>
+                <button type="button" data-board="all">All</button>
+              </div>
               <button class="ghost" id="export-csv" type="button">Export CSV</button>
             </div>
           </div>
@@ -126,6 +132,8 @@
                   <option value="emailed">Emailed</option>
                   <option value="out">Out</option>
                   <option value="done">Done</option>
+                  <option value="quote">Quote</option>
+                  <option value="void">Void</option>
                 </select>
               </div>
               <div>
@@ -133,7 +141,8 @@
                 <input id="f-rate" type="number" min="0" step="1" class="hidden" />
               </div>
             </div>
-            <p class="muted" style="margin:6px 0 0">Extra site minutes, extra wait minutes, and forklift fee default to 0. Shop rates and the dump-road buffer live in Settings.</p>
+            <label class="inline-check"><input id="f-quote" type="checkbox" /> Quote only — same math, not a live delivery</label>
+            <p class="muted" style="margin:6px 0 0">Quotes and voids stay off the live board. Extra site minutes, extra wait minutes, and forklift fee default to 0.</p>
             <label>Driver / yard notes</label>
             <textarea id="f-notes" placeholder="Gate code, dump spot, call 10 minutes out, stay off new asphalt…"></textarea>
 
@@ -167,6 +176,8 @@
               <button class="ghost" id="save-btn" type="button">Save ticket</button>
               <button class="ok" id="print-inv" type="button">Print invoice + route sheet</button>
               <button class="ghost" id="email-acct" type="button">Email Nick / dispatch</button>
+              <button class="ghost" id="void-btn" type="button">Void mishap</button>
+              <button class="ghost" id="delete-btn" type="button">Delete</button>
             </div>
           </div>
           <div>
