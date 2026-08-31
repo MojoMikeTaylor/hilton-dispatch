@@ -48,9 +48,9 @@ function readStore() {
   try {
     const raw = fs.readFileSync(STORE, "utf8");
     const data = JSON.parse(raw);
-    return { seeded: false, settings: data.settings || null, jobs: Array.isArray(data.jobs) ? data.jobs : [] };
+    return { seeded: false, settings: data.settings || null, jobs: Array.isArray(data.jobs) ? data.jobs : [], customers: Array.isArray(data.customers) ? data.customers : [] };
   } catch (e) {
-    return { seeded: true, settings: null, jobs: [] };
+    return { seeded: true, settings: null, jobs: [], customers: [] };
   }
 }
 
@@ -119,6 +119,22 @@ const server = http.createServer(async (req, res) => {
   const url = req.url || "/";
   const method = req.method || "GET";
 
+  if (url.split("?")[0] === "/api/customers-seed" && method === "GET") {
+    const seedPath = path.join(ROOT, "data", "customers-seed.json");
+    fs.readFile(seedPath, "utf8", (err, raw) => {
+      if (err) {
+        sendJson(res, 200, []);
+        return;
+      }
+      try {
+        sendJson(res, 200, JSON.parse(raw));
+      } catch (e) {
+        sendJson(res, 200, []);
+      }
+    });
+    return;
+  }
+
   if (url.split("?")[0] === "/api/config" && method === "GET") {
     sendJson(res, 200, { googleMapsKey: process.env.GOOGLE_MAPS_API_KEY || "" });
     return;
@@ -177,6 +193,7 @@ const server = http.createServer(async (req, res) => {
       const out = {
         settings: data.settings || null,
         jobs: Array.isArray(data.jobs) ? data.jobs : [],
+        customers: Array.isArray(data.customers) ? data.customers : [],
         savedAt: new Date().toISOString(),
       };
       atomicWrite(STORE, JSON.stringify(out, null, 2));

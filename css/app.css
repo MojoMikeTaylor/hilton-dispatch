@@ -193,6 +193,12 @@ tr.clickable:hover { background: #faf4ea; }
 .banner strong { display: block; margin-bottom: 2px; }
 .quarry-banner { background: #3b2118; color: #f3d7b5; border-color: #6b1518; }
 .fee-hot { outline: 2px solid var(--burgundy); border-radius: 10px; padding: 0 8px 8px; }
+.account-strip {
+  background: #f7f1e8; border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; margin: 10px 0 6px; font-size: 13px; line-height: 1.45;
+}
+.account-strip .k { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.account-strip.noacct { background: #f4e3b5; }
 .book-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 10px; }
 .book-tabs button {
   background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 999px;

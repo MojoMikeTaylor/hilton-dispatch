@@ -51,6 +51,11 @@ function blankDraft() {
     route: null,
     quote: null,
     quarryDirect: false,
+    qbId: "",
+    qbName: "",
+    billTo: "",
+    ccEmail: "",
+    noAccount: true,
   };
 }
 
@@ -80,6 +85,7 @@ function normalizeStore(data) {
   data.settings.priceSheet = HD_DEFAULTS.priceSheet;
   data.settings.catalogConfirmed = !catalogNeedsPricesFrom(data.settings.materials);
   data.jobs.forEach((j) => { j.status = normalizeStatus(j.status); });
+  if (!Array.isArray(data.customers)) data.customers = [];
   return data;
 }
 
@@ -130,7 +136,7 @@ function cacheLocal(data) {
 }
 
 function seedStore() {
-  return { settings: JSON.parse(JSON.stringify(HD_DEFAULTS)), jobs: [] };
+  return { settings: JSON.parse(JSON.stringify(HD_DEFAULTS)), jobs: [], customers: [] };
 }
 
 async function putStore(data) {
@@ -139,7 +145,7 @@ async function putStore(data) {
     const res = await fetch("/api/store", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ settings: data.settings, jobs: data.jobs }),
+      body: JSON.stringify({ settings: data.settings, jobs: data.jobs, customers: data.customers || [] }),
     });
     if (res.ok) state.serverReady = true;
   } catch (e) {
@@ -194,6 +200,177 @@ async function applyEnvGoogleKey() {
       db.settings.maps.googleKey = envKey;
     }
   } catch (e) { /* static host */ }
+}
+
+async function loadCustomerSeed() {
+  try {
+    const res = await fetch("/api/customers-seed");
+    if (!res.ok) return [];
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+async function ensureCustomers() {
+  if (!Array.isArray(db.customers)) db.customers = [];
+  if (db.customers.length) return;
+  db.customers = await loadCustomerSeed();
+  if (db.customers.length) saveStore(db, true);
+}
+
+function splitQbName(qbName) {
+  const raw = String(qbName || "");
+  const i = raw.indexOf(":");
+  if (i < 0) return { account: raw.trim(), job: "" };
+  return { account: raw.slice(0, i).trim(), job: raw.slice(i + 1).trim() };
+}
+
+function accountPhone(acct) {
+  return (acct && (acct.phone || acct.workPhone || acct.mobile)) || "";
+}
+
+function searchCustomers(q) {
+  const s = (q || "").trim().toLowerCase();
+  if (s.length < 2) return [];
+  const list = db.customers || [];
+  const hits = [];
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i];
+    const blob = ((a.qbName || "") + " " + (a.company || "") + " " + (a.first || "") + " " + (a.last || "")).toLowerCase();
+    if (blob.indexOf(s) >= 0) {
+      hits.push(a);
+      if (hits.length >= 12) break;
+    }
+  }
+  return hits;
+}
+
+function applyQbAccount(acct) {
+  if (!acct) return;
+  const parts = splitQbName(acct.qbName);
+  state.draft.qbId = acct.id;
+  state.draft.qbName = acct.qbName;
+  state.draft.customer = parts.account || acct.qbName;
+  state.draft.billTo = acct.billTo || "";
+  state.draft.ccEmail = acct.ccEmail || "";
+  state.draft.noAccount = false;
+  state.draft.phone = accountPhone(acct);
+  state.draft.email = acct.email || "";
+  if (parts.job) state.draft.jobName = parts.job;
+  $("f-customer").value = state.draft.customer;
+  $("f-phone").value = state.draft.phone;
+  $("f-email").value = state.draft.email;
+  if (parts.job) $("f-job").value = parts.job;
+  $("cust-suggest").classList.add("hidden");
+  $("cust-suggest").innerHTML = "";
+  renderAccountStrip();
+}
+
+function renderAccountStrip() {
+  const el = $("account-strip");
+  if (!el) return;
+  const d = state.draft;
+  if (d.qbName) {
+    el.classList.remove("hidden", "noacct");
+    el.innerHTML = `
+      <div class="k">Account — QuickBooks</div>
+      <div><strong>${esc(d.qbName)}</strong></div>
+      <div>${esc(d.billTo || "—")}</div>
+      <div>${esc(d.email || "—")}${d.ccEmail ? " · CC " + esc(d.ccEmail) : ""}</div>
+      <div>${esc(d.phone || "—")}</div>`;
+    return;
+  }
+  if ((d.customer || "").trim()) {
+    el.classList.remove("hidden");
+    el.classList.add("noacct");
+    el.innerHTML = `<div class="k">No account</div><div>Cash / one-off — not a QuickBooks customer. Accounting will see this ticket as no account.</div>`;
+    return;
+  }
+  el.classList.add("hidden");
+  el.innerHTML = "";
+}
+
+function syncAccountFromCustomerField() {
+  const typed = ($("f-customer").value || "").trim();
+  if (!typed) {
+    state.draft.qbId = "";
+    state.draft.qbName = "";
+    state.draft.billTo = "";
+    state.draft.ccEmail = "";
+    state.draft.noAccount = true;
+    renderAccountStrip();
+    return;
+  }
+  if (state.draft.qbName) {
+    const parts = splitQbName(state.draft.qbName);
+    if (typed === state.draft.qbName || typed === parts.account) {
+      state.draft.noAccount = false;
+      renderAccountStrip();
+      return;
+    }
+  }
+  const exact = (db.customers || []).find((a) => a.qbName === typed || splitQbName(a.qbName).account === typed);
+  if (exact) {
+    applyQbAccount(exact);
+    return;
+  }
+  state.draft.qbId = "";
+  state.draft.qbName = "";
+  state.draft.billTo = "";
+  state.draft.ccEmail = "";
+  state.draft.noAccount = true;
+  renderAccountStrip();
+}
+
+let qbEditId = null;
+
+function renderQbEditor(acct) {
+  const a = acct || {
+    id: "qb-" + Date.now(),
+    qbName: "", company: "", first: "", last: "",
+    primaryContact: "", secondaryContact: "",
+    email: "", ccEmail: "", phone: "", workPhone: "", mobile: "",
+    billTo: "", street1: "", street2: "", city: "", state: "", zip: "",
+  };
+  qbEditId = a.id;
+  $("qb-editor").innerHTML = `
+    <div class="row"><div><label>QuickBooks name (exact)</label><input id="qb-name" value="${escAttr(a.qbName)}"></div>
+    <div><label>Company</label><input id="qb-company" value="${escAttr(a.company)}"></div></div>
+    <div class="row"><div><label>Main phone</label><input id="qb-phone" value="${escAttr(a.phone)}"></div>
+    <div><label>Main email</label><input id="qb-email" value="${escAttr(a.email)}"></div></div>
+    <div class="row"><div><label>CC email</label><input id="qb-cc" value="${escAttr(a.ccEmail)}"></div>
+    <div><label>Work / mobile</label><input id="qb-mobile" value="${escAttr(a.workPhone || a.mobile)}"></div></div>
+    <label>Bill-to (billing, not dump site)</label>
+    <textarea id="qb-billto">${esc(a.billTo)}</textarea>`;
+}
+
+function saveQbEditor() {
+  if (!qbEditId) { toast("Search or add an account first"); return; }
+  const rec = {
+    id: qbEditId,
+    qbName: $("qb-name").value.trim(),
+    company: $("qb-company").value.trim(),
+    first: "", last: "",
+    primaryContact: "", secondaryContact: "",
+    email: $("qb-email").value.trim(),
+    ccEmail: $("qb-cc").value.trim(),
+    phone: $("qb-phone").value.trim(),
+    workPhone: "",
+    mobile: $("qb-mobile").value.trim(),
+    billTo: $("qb-billto").value.trim(),
+    street1: "", street2: "", city: "", state: "", zip: "",
+  };
+  if (!rec.qbName) { toast("QuickBooks name is required"); return; }
+  const idx = (db.customers || []).findIndex((a) => a.id === rec.id);
+  if (idx >= 0) {
+    db.customers[idx] = { ...db.customers[idx], ...rec };
+  } else {
+    db.customers.push(rec);
+  }
+  saveStore(db, true);
+  toast("Account saved");
 }
 
 let db = seedStore();
@@ -484,6 +661,7 @@ function renderForm() {
   const d = state.draft;
   const b = db.settings.billing;
   $("f-customer").value = d.customer;
+  renderAccountStrip();
   $("f-phone").value = d.phone;
   $("f-email").value = d.email || "";
   $("f-when").value = d.deliverOn || "";
@@ -675,6 +853,8 @@ function collectForm() {
   state.draft.customer = $("f-customer").value.trim();
   state.draft.phone = $("f-phone").value.trim();
   state.draft.email = $("f-email").value.trim();
+  syncAccountFromCustomerField();
+  state.draft.noAccount = !state.draft.qbName;
   state.draft.deliverOn = $("f-when").value;
   state.draft.jobName = $("f-job").value.trim();
   state.draft.address = $("f-address").value.trim();
@@ -994,8 +1174,20 @@ function buildPrint(ticket) {
         </div>
       </div>
       <div class="row">
-        <div><strong>Bill To</strong><br>${esc(ticket.customer)}<br>${esc(ticket.phone)}<br>${esc(ticket.email || "")}<br>${esc(ticket.jobName)}</div>
-        <div><strong>Deliver To</strong><br>${esc(ticket.address)}<br>Truck: ${esc(truckLine)}<br>Driver / unit: ${esc(ticket.driver || "—")} ${esc(ticket.truckUnit || "")}<br>Deliver on: ${esc(ticket.deliverOn ? ticket.deliverOn.replace("T", " ") : "—")}</div>
+        <div>
+          <strong>Sold to / QuickBooks account</strong><br>
+          ${ticket.qbName ? esc(ticket.qbName) : esc(ticket.customer) + " <em>(no account)</em>"}<br>
+          ${ticket.noAccount && !ticket.qbName ? "Cash / one-off — no QuickBooks account<br>" : ""}
+          ${esc(ticket.phone || "")}${ticket.email ? "<br>" + esc(ticket.email) : ""}${ticket.ccEmail ? "<br>CC " + esc(ticket.ccEmail) : ""}
+        </div>
+        <div>
+          <strong>Bill-to</strong><br>${esc(ticket.billTo || "—")}<br><br>
+          <strong>Job / site</strong><br>${esc(ticket.jobName || "—")}
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div><strong>Deliver to (truck)</strong><br>${esc(ticket.address)}<br>Truck: ${esc(truckLine)}<br>Driver / unit: ${esc(ticket.driver || "—")} ${esc(ticket.truckUnit || "")}<br>Deliver on: ${esc(ticket.deliverOn ? ticket.deliverOn.replace("T", " ") : "—")}</div>
+        <div></div>
       </div>
       <h3 style="margin-top:18px">Materials</h3>
       <table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Amount</th></tr></thead><tbody>${matRows}</tbody></table>
@@ -1071,9 +1263,12 @@ function emailAccounting(ticket) {
     `Ticket: ${ticket.id}`,
     quarry ? `Label: Quarry direct — truckload` : null,
     `Date: ${ticket.createdAt}`,
-    `Customer: ${ticket.customer}  ${ticket.phone}`,
-    `Job: ${ticket.jobName || ""}`,
-    `Deliver to: ${ticket.address}`,
+    `Sold to / QuickBooks: ${ticket.qbName || ticket.customer}${ticket.noAccount && !ticket.qbName ? " (no account)" : ""}`,
+    `Bill-to: ${ticket.billTo || "—"}`,
+    `Job / site: ${ticket.jobName || ""}`,
+    `Deliver to (truck): ${ticket.address}`,
+    `Phone: ${ticket.phone || ""}`,
+    `Email: ${ticket.email || ""}${ticket.ccEmail ? "  CC " + ticket.ccEmail : ""}`,
     `Origin yard: ${yard.name} — ${yard.address}`,
     `Truck: ${truckName(ticket.truck)} @ ${HDEngine.money(q.rate)}/hr × ${q.loadCount || 1} load(s)`,
     `Mapped one-way: ${(q.oneWayMin || 0).toFixed(1)} min`,
@@ -1181,6 +1376,7 @@ function seedPreview() {
 
 async function onReady() {
   await bootStore();
+  await ensureCustomers();
   await applyEnvGoogleKey();
   bindPin();
   $("login-btn").addEventListener("click", attemptLogin);
@@ -1262,6 +1458,70 @@ async function onReady() {
     $("addr-suggest").innerHTML = "";
     HDMaps.hoverSuggest = false;
   }
+  let custHover = false;
+  let custTimer = null;
+  function showCustHits(hits) {
+    const box = $("cust-suggest");
+    if (!hits.length) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+    box.classList.remove("hidden");
+    box.innerHTML = hits.map((a) =>
+      `<div data-qb="${escAttr(a.id)}"><strong>${esc(a.qbName)}</strong>${a.company && a.company !== a.qbName ? `<div class="muted">${esc(a.company)}</div>` : ""}</div>`
+    ).join("");
+  }
+  $("f-customer").addEventListener("input", (e) => {
+    if (custHover) return;
+    clearTimeout(custTimer);
+    const val = e.target.value;
+    custTimer = setTimeout(() => {
+      if (custHover) return;
+      showCustHits(searchCustomers(val));
+    }, 200);
+  });
+  $("f-customer").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const first = document.querySelector("#cust-suggest [data-qb]");
+    if (first) {
+      const acct = (db.customers || []).find((a) => a.id === first.dataset.qb);
+      if (acct) applyQbAccount(acct);
+    } else {
+      syncAccountFromCustomerField();
+    }
+  });
+  $("f-customer").addEventListener("blur", () => {
+    setTimeout(syncAccountFromCustomerField, 150);
+  });
+  $("cust-suggest").addEventListener("mouseenter", () => { custHover = true; });
+  $("cust-suggest").addEventListener("mouseleave", () => { custHover = false; });
+  $("cust-suggest").addEventListener("mousedown", (e) => {
+    const row = e.target.closest("[data-qb]");
+    if (!row) return;
+    e.preventDefault();
+    const acct = (db.customers || []).find((a) => a.id === row.dataset.qb);
+    if (acct) applyQbAccount(acct);
+  });
+  $("reload-customers").addEventListener("click", async () => {
+    if (!confirm("Replace the customer list with the shipped QuickBooks file? Manual account edits will be overwritten.")) return;
+    db.customers = await loadCustomerSeed();
+    saveStore(db, true);
+    $("qb-results").innerHTML = "";
+    $("qb-editor").innerHTML = "";
+    toast("Customer list reloaded — " + db.customers.length + " accounts");
+  });
+  $("qb-search").addEventListener("input", (e) => {
+    const hits = searchCustomers(e.target.value);
+    $("qb-results").innerHTML = hits.map((a) =>
+      `<div data-qbedit="${escAttr(a.id)}">${esc(a.qbName)}</div>`
+    ).join("") || (e.target.value.trim().length >= 2 ? `<div class="empty">No match</div>` : "");
+  });
+  $("qb-results").addEventListener("click", (e) => {
+    const row = e.target.closest("[data-qbedit]");
+    if (!row) return;
+    const acct = (db.customers || []).find((a) => a.id === row.dataset.qbedit);
+    if (acct) renderQbEditor(acct);
+  });
+  $("qb-save").addEventListener("click", saveQbEditor);
+  $("qb-add").addEventListener("click", () => renderQbEditor(null));
   $("f-address").addEventListener("input", (e) => {
     const box = $("addr-suggest");
     if (HDMaps.hoverSuggest) return;

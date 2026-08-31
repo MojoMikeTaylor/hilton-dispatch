@@ -87,7 +87,13 @@
               Willow Creek is quarry only. Truckload tons from the quarry book. Route starts at 4825 Old Stage Road.
             </div>
             <div class="row">
-              <div><label>Customer</label><input id="f-customer" type="text" placeholder="Name or company" /></div>
+              <div>
+                <label>Customer</label>
+                <div class="addr-wrap">
+                  <input id="f-customer" type="text" placeholder="Start typing a QuickBooks account…" autocomplete="off" />
+                  <div id="cust-suggest" class="addr-suggest hidden"></div>
+                </div>
+              </div>
               <div><label>Phone</label><input id="f-phone" type="tel" placeholder="541-…" /></div>
             </div>
             <div class="row">
@@ -96,6 +102,7 @@
             </div>
             <label>Job / site name</label>
             <input id="f-job" type="text" placeholder="Subdivision, job number, gate code…" />
+            <div id="account-strip" class="account-strip hidden"></div>
             <label>Delivery address</label>
             <div class="addr-wrap">
               <input id="f-address" type="text" placeholder="Street, city, OR zip" autocomplete="off" />
@@ -270,6 +277,19 @@
             <h2>Yards</h2>
             <p class="muted">Central Point, Medford, and Willow Creek Aggregate ship as origin points. Edit addresses if a gate or scale house is the real start.</p>
             <div id="yard-editor"></div>
+            <h2 style="margin-top:22px">QuickBooks customers</h2>
+            <p class="muted">Exact names from the QuickBooks customer list. Reload restores the shipped file. Add or edit is admin-only. Search — do not dump the whole book on screen.</p>
+            <div class="btn-row" style="margin:0 0 10px">
+              <button class="ghost" id="reload-customers" type="button">Reload customer list</button>
+            </div>
+            <label>Find account</label>
+            <input id="qb-search" type="text" placeholder="Search QuickBooks name or company…" autocomplete="off" />
+            <div id="qb-results" class="search-list" style="margin-top:8px"></div>
+            <div id="qb-editor"></div>
+            <div class="btn-row">
+              <button class="primary" id="qb-save" type="button">Save this account</button>
+              <button class="ghost" id="qb-add" type="button">Add account</button>
+            </div>
           </div>
         </div>
       </section>
