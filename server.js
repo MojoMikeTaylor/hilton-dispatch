@@ -119,6 +119,49 @@ const server = http.createServer(async (req, res) => {
   const url = req.url || "/";
   const method = req.method || "GET";
 
+  if (url.split("?")[0] === "/api/config" && method === "GET") {
+    sendJson(res, 200, { googleMapsKey: process.env.GOOGLE_MAPS_API_KEY || "" });
+    return;
+  }
+
+  if (url.split("?")[0] === "/api/places" && method === "POST") {
+    try {
+      const raw = await readBody(req, 8000);
+      const body = JSON.parse(raw || "{}");
+      const input = String(body.input || "").trim();
+      const key = String(body.key || process.env.GOOGLE_MAPS_API_KEY || "").trim();
+      if (!input || !key) {
+        sendJson(res, 200, { suggestions: [] });
+        return;
+      }
+      const gRes = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": key,
+          "X-Goog-FieldMask": "suggestions.placePrediction.placeId,suggestions.placePrediction.text",
+        },
+        body: JSON.stringify({
+          input,
+          includedRegionCodes: ["us"],
+          locationBias: {
+            circle: { center: { latitude: 42.39, longitude: -122.91 }, radius: 80000 },
+          },
+        }),
+      });
+      const gJson = await gRes.json();
+      const suggestions = (gJson.suggestions || []).map((s) => {
+        const p = s.placePrediction || {};
+        const text = p.text && p.text.text;
+        return { label: text || "", placeId: p.placeId || "" };
+      }).filter((s) => s.label);
+      sendJson(res, 200, { suggestions });
+    } catch (e) {
+      sendJson(res, 200, { suggestions: [] });
+    }
+    return;
+  }
+
   if (url.split("?")[0] === "/api/store" && method === "GET") {
     sendJson(res, 200, readStore());
     return;

@@ -15,6 +15,8 @@ const state = {
   filter: "",
   persistTimer: null,
   serverReady: false,
+  book: "store",
+  catalogBook: "store",
 };
 
 function blankDraft() {
@@ -23,7 +25,6 @@ function blankDraft() {
   return {
     id: null,
     createdAt: null,
-    status: "open",
     customer: "",
     phone: "",
     email: "",
@@ -31,6 +32,7 @@ function blankDraft() {
     address: "",
     city: "",
     notes: "",
+    status: "new",
     yardId: "cp",
     truck: "dump",
     driver: "",
@@ -38,9 +40,11 @@ function blankDraft() {
     po: "",
     loads: 1,
     extraMinutes: 0,
+    extraSiteMinutes: 0,
+    extraWaitMinutes: 0,
     forkliftFee: 0,
     rateOverride: null,
-    bufferOverride: null,
+    adminRate: false,
     deliverOn: when.toISOString().slice(0, 16),
     materials: [],
     route: null,
@@ -74,7 +78,13 @@ function normalizeStore(data) {
   }
   data.settings.priceSheet = HD_DEFAULTS.priceSheet;
   data.settings.catalogConfirmed = !catalogNeedsPricesFrom(data.settings.materials);
+  data.jobs.forEach((j) => { j.status = normalizeStatus(j.status); });
   return data;
+}
+
+function normalizeStatus(s) {
+  const map = { open: "new", sent: "emailed", delivered: "done" };
+  return map[s] || s || "new";
 }
 
 function catalogNeedsPricesFrom(materials) {
@@ -153,6 +163,18 @@ async function bootStore() {
   db = normalizeStore(local || seedStore());
   cacheLocal(db);
   await putStore(db);
+}
+
+async function applyEnvGoogleKey() {
+  try {
+    const res = await fetch("/api/config");
+    if (!res.ok) return;
+    const cfg = await res.json();
+    const envKey = (cfg && cfg.googleMapsKey) || "";
+    if (envKey && !(db.settings.maps.googleKey || "").trim()) {
+      db.settings.maps.googleKey = envKey;
+    }
+  } catch (e) { /* static host */ }
 }
 
 let db = seedStore();
@@ -289,9 +311,13 @@ function renderBoard() {
     ? jobs.filter((j) => JSON.stringify(j).toLowerCase().includes(q))
     : jobs;
   const today = new Date().toISOString().slice(0, 10);
-  const todays = jobs.filter((j) => (j.createdAt || "").slice(0, 10) === today);
-  const open = jobs.filter((j) => j.status === "open");
-  const billed = jobs.reduce((s, j) => s + ((j.quote && j.quote.total) || 0), 0);
+  const isToday = (j) => {
+    const a = (j.deliverOn || j.createdAt || "").slice(0, 10);
+    return a === today;
+  };
+  const todays = jobs.filter(isToday);
+  const open = jobs.filter((j) => ["new", "routed", "printed", "emailed", "out", "open"].indexOf(j.status) >= 0);
+  const billed = todays.reduce((s, j) => s + ((j.quote && j.quote.total) || 0), 0);
 
   $("kpi-today").textContent = String(todays.length);
   $("kpi-open").textContent = String(open.length);
@@ -304,22 +330,23 @@ function renderBoard() {
   $("job-table").innerHTML = `
     <table>
       <thead><tr>
-        <th>Ticket</th><th>Customer</th><th>Yard</th><th>Truck</th><th>Total</th><th>Status</th><th></th>
+        <th>Ticket</th><th>Customer</th><th>Yard</th><th>Truck</th><th>Window</th><th>Total</th><th>Status</th><th></th>
       </tr></thead>
       <tbody>
         ${list.map((j) => `
           <tr class="clickable" data-open="${j.id}">
             <td><strong>${j.id}</strong><div class="muted">${(j.createdAt || "").replace("T", " ").slice(0, 16)}</div></td>
-            <td>${esc(j.customer) || "—"}${j.quarryDirect || isQuarryYard(j.yardId) ? `<div class="muted">Quarry direct — truckload</div>` : ""}<div class="muted">${esc(j.address)}</div></td>
+            <td>${esc(j.customer) || "—"}${j.quarryDirect || isQuarryYard(j.yardId) ? `<div class="muted">Willow Creek — truckload</div>` : ""}<div class="muted">${esc(j.address)}</div></td>
             <td>${esc((yardById(j.yardId) || {}).name || "")}</td>
             <td><span class="badge ${j.truck}">${truckLabel(j.truck)}</span></td>
+            <td>${esc((j.deliverOn || "").replace("T", " "))}</td>
             <td>${j.quote ? HDEngine.money(j.quote.total) : "—"}</td>
-            <td><span class="badge ${j.status}">${j.status}</span></td>
+            <td><span class="badge ${j.status}">${esc(j.status)}</span></td>
             <td class="actions">
               <button class="ghost" data-open="${j.id}">Open</button>
               <button class="ghost" data-dup="${j.id}">Copy</button>
-              <button class="ghost" data-st="${j.id}|delivered">Done</button>
-              <button class="ghost" data-st="${j.id}|void">Void</button>
+              <button class="ghost" data-st="${j.id}|out">Out</button>
+              <button class="ghost" data-st="${j.id}|done">Done</button>
             </td>
           </tr>`).join("")}
       </tbody>
@@ -360,44 +387,58 @@ function setTruck(truck, resetRate) {
   if ($("f-truck-dump")) $("f-truck-dump").checked = truck === "dump";
   if ($("f-truck-small")) $("f-truck-small").checked = truck === "small";
   if ($("f-truck-forklift")) $("f-truck-forklift").checked = truck === "forklift";
-  if (resetRate !== false) {
+  if (resetRate !== false && state.draft.adminRate) {
     const rate = defaultRateFor(truck);
     state.draft.rateOverride = rate;
     if ($("f-rate")) $("f-rate").value = rate;
+  } else if (!state.draft.adminRate) {
+    state.draft.rateOverride = null;
   }
   updateTicketChrome();
   renderQuoteBox();
 }
 
 function updateTicketChrome() {
-  const dump = state.draft.truck === "dump";
   const hot = state.draft.truck === "forklift" || ticketNeedsForklift();
-  if ($("buffer-wrap")) $("buffer-wrap").classList.toggle("hidden", !dump);
   if ($("forklift-fee-wrap")) $("forklift-fee-wrap").classList.toggle("fee-hot", hot);
   if ($("quarry-banner")) $("quarry-banner").classList.toggle("hidden", !isQuarryYard(state.draft.yardId));
+  if ($("f-rate")) $("f-rate").classList.toggle("hidden", !state.draft.adminRate);
+  if ($("f-admin-rate")) $("f-admin-rate").checked = !!state.draft.adminRate;
+  syncBookTabs();
+}
+
+function setBook(book) {
+  state.book = book || "store";
+  syncBookTabs();
+  if ($("mat-search")) materialSearch($("mat-search").value);
+}
+
+function syncBookTabs() {
+  document.querySelectorAll("#book-tabs [data-book]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.book === state.book);
+  });
+  const hints = {
+    store: "Store Price Sheet 2026 — yard retail. Search this tab only.",
+    flagstone: "Flagstone 2026 — prices per pound unless bag. Forklift fee is extra.",
+    boulders: "Boulders / colored rock flyer. Approx. weights: rock 2500 · sand 2600 · bark 900 · cinder 1500 lb/yd.",
+    willow: "Willow Creek pit prices in tons. Isolated from store yard prices.",
+  };
+  if ($("book-hint")) $("book-hint").textContent = hints[state.book] || "";
 }
 
 function applyYardRules() {
   const quarry = isQuarryYard(state.draft.yardId);
   state.draft.quarryDirect = quarry;
-  if (quarry) {
-    const before = state.draft.materials.length;
-    state.draft.materials = state.draft.materials.filter((m) => HDCatalog.isQuarry(m));
-    if (state.draft.materials.length !== before) {
-      toast("Willow Creek is quarry direct — retail items removed");
-      renderMaterialLines();
-    }
-  }
+  if (quarry) setBook("willow");
   if (ticketNeedsForklift() && state.draft.truck !== "forklift") setTruck("forklift");
   updateTicketChrome();
   if ($("mat-search")) materialSearch($("mat-search").value);
   renderQuoteBox();
 }
 
-function materialsForYard() {
-  const pool = db.settings.materials || [];
-  if (isQuarryYard(state.draft.yardId)) return pool.filter((m) => HDCatalog.isQuarry(m));
-  return pool.filter((m) => !HDCatalog.isQuarry(m));
+function materialsForActiveBook() {
+  const book = state.book || "store";
+  return (db.settings.materials || []).filter((m) => HDCatalog.inBook(m, book));
 }
 
 function renderForm() {
@@ -414,29 +455,31 @@ function renderForm() {
   $("f-unit").value = d.truckUnit;
   $("f-po").value = d.po;
   $("f-loads").value = d.loads || 1;
-  $("f-extra").value = d.extraMinutes || 0;
+  $("f-site-min").value = d.extraSiteMinutes || 0;
+  $("f-wait-min").value = d.extraWaitMinutes || 0;
   $("f-forklift-fee").value = d.forkliftFee || 0;
-  $("f-status").value = d.status || "open";
+  $("f-status").value = normalizeStatus(d.status);
   const truck = d.truck || "dump";
   $("f-truck-dump").checked = truck === "dump";
   $("f-truck-small").checked = truck === "small";
   $("f-truck-forklift").checked = truck === "forklift";
   const defaultRate = defaultRateFor(truck);
-  const defaultBuf = Math.round((b.dumpTimeMultiplier - 1) * 100);
   $("f-rate").value = d.rateOverride != null ? d.rateOverride : defaultRate;
-  $("f-buffer").value = d.bufferOverride != null ? d.bufferOverride : defaultBuf;
-  $("dump-rate-label").textContent = `$${b.dumpRate} / hour · +${defaultBuf}% route time`;
-  $("small-rate-label").textContent = `$${b.smallRate} / hour · mapped time`;
-  $("forklift-rate-label").textContent = `$${b.forkliftRate || b.dumpRate} / hour · mapped time · extra fee below`;
+  $("f-admin-rate").checked = !!d.adminRate;
+  $("dump-rate-label").textContent = `$${b.dumpRate} / hour`;
+  $("small-rate-label").textContent = `$${b.smallRate} / hour`;
+  $("forklift-rate-label").textContent = `$${b.forkliftRate || b.dumpRate} / hour · extra fee below`;
   $("price-banner").classList.toggle("hidden", !catalogNeedsPrices());
   const yardSel = $("f-yard");
   yardSel.innerHTML = db.settings.yards.map((y) =>
     `<option value="${y.id}" ${y.id === d.yardId ? "selected" : ""}>${y.name} — ${y.address}</option>`
   ).join("");
+  if (isQuarryYard(d.yardId)) state.book = "willow";
+  else if (!state.book) state.book = "store";
   updateTicketChrome();
   renderMaterialLines();
   renderQuoteBox();
-  if (isQuarryYard(d.yardId)) materialSearch("");
+  materialSearch($("mat-search") ? $("mat-search").value : "");
 }
 
 function renderMaterialLines() {
@@ -490,15 +533,13 @@ function onLineEdit(e) {
 
 function ticketBilling() {
   const b = { ...db.settings.billing };
-  const rate = Number(state.draft.rateOverride);
-  if (isFinite(rate) && rate > 0) {
-    if (state.draft.truck === "dump") b.dumpRate = rate;
-    else if (state.draft.truck === "forklift") b.forkliftRate = rate;
-    else b.smallRate = rate;
-  }
-  const buf = Number(state.draft.bufferOverride);
-  if (isFinite(buf) && buf >= 0) {
-    b.dumpTimeMultiplier = 1 + buf / 100;
+  if (state.draft.adminRate) {
+    const rate = Number(state.draft.rateOverride);
+    if (isFinite(rate) && rate > 0) {
+      if (state.draft.truck === "dump") b.dumpRate = rate;
+      else if (state.draft.truck === "forklift") b.forkliftRate = rate;
+      else b.smallRate = rate;
+    }
   }
   return b;
 }
@@ -511,7 +552,8 @@ function currentQuote() {
     billing: ticketBilling(),
     materials: state.draft.materials,
     loads: state.draft.loads,
-    extraMinutes: state.draft.extraMinutes,
+    extraSiteMinutes: state.draft.extraSiteMinutes,
+    extraWaitMinutes: state.draft.extraWaitMinutes,
     forkliftFee: state.draft.forkliftFee,
   });
   if (isQuarryYard(state.draft.yardId)) {
@@ -548,6 +590,10 @@ async function calculateRoute() {
     state.route = route;
     state.draft.address = address;
     state.draft.yardId = yard.id;
+    if (normalizeStatus(state.draft.status) === "new") {
+      state.draft.status = "routed";
+      $("f-status").value = "routed";
+    }
     drawMap(route);
     renderQuoteBox();
     toast("Route locked");
@@ -599,11 +645,13 @@ function collectForm() {
   state.draft.yardId = $("f-yard").value;
   state.draft.truck = selectedTruck();
   state.draft.loads = Math.max(1, Number($("f-loads").value) || 1);
-  state.draft.extraMinutes = Math.max(0, Number($("f-extra").value) || 0);
+  state.draft.extraSiteMinutes = Math.max(0, Number($("f-site-min").value) || 0);
+  state.draft.extraWaitMinutes = Math.max(0, Number($("f-wait-min").value) || 0);
+  state.draft.extraMinutes = state.draft.extraSiteMinutes + state.draft.extraWaitMinutes;
   state.draft.forkliftFee = Math.max(0, Number($("f-forklift-fee").value) || 0);
-  state.draft.status = $("f-status").value || "open";
-  state.draft.rateOverride = Number($("f-rate").value);
-  state.draft.bufferOverride = Number($("f-buffer").value);
+  state.draft.status = normalizeStatus($("f-status").value);
+  state.draft.adminRate = !!($("f-admin-rate") && $("f-admin-rate").checked);
+  state.draft.rateOverride = state.draft.adminRate ? Number($("f-rate").value) : null;
   state.draft.quarryDirect = isQuarryYard(state.draft.yardId);
 }
 
@@ -613,10 +661,6 @@ function saveTicket(status) {
     toast("Customer and delivery address are required");
     return null;
   }
-  if (isQuarryYard(state.draft.yardId) && state.draft.materials.some((m) => !HDCatalog.isQuarry(m))) {
-    toast("Willow Creek is quarry truckload only");
-    return null;
-  }
   const q = currentQuote();
   const existing = state.draft.id && db.jobs.find((j) => j.id === state.draft.id);
   const ticket = {
@@ -624,7 +668,7 @@ function saveTicket(status) {
     id: state.draft.id || nextTicket(),
     createdAt: (existing && existing.createdAt) || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    status: status || state.draft.status || "open",
+    status: normalizeStatus(status || state.draft.status || "new"),
     quote: q,
     route: state.route,
     quarryDirect: isQuarryYard(state.draft.yardId),
@@ -643,6 +687,9 @@ function openTicket(id) {
   if (!job) return;
   state.draft = JSON.parse(JSON.stringify(job));
   if (state.draft.forkliftFee == null) state.draft.forkliftFee = 0;
+  if (state.draft.extraSiteMinutes == null) state.draft.extraSiteMinutes = 0;
+  if (state.draft.extraWaitMinutes == null) state.draft.extraWaitMinutes = Number(state.draft.extraMinutes) || 0;
+  state.draft.status = normalizeStatus(state.draft.status);
   state.route = job.route || null;
   state.quote = job.quote || null;
   show("new");
@@ -653,29 +700,26 @@ function newTicket() {
   state.draft = blankDraft();
   state.route = null;
   state.quote = null;
+  state.book = "store";
   show("new");
 }
 
 function materialSearch(q) {
   const s = (q || "").toLowerCase();
-  const pool = materialsForYard();
+  const pool = materialsForActiveBook();
   const hits = (s
-    ? pool.filter((m) => (m.name + " " + m.category).toLowerCase().includes(s))
-    : (isQuarryYard() ? pool : [])
+    ? pool.filter((m) => (m.name + " " + m.category + " " + (m.note || "")).toLowerCase().includes(s))
+    : pool
   ).slice(0, 16);
   $("mat-results").innerHTML = hits.map((m) =>
     `<div data-add="${m.id}"><strong>${esc(m.name)}</strong> · ${HDEngine.money(m.price)} / ${esc(m.unit)}
-     <div class="cat">${esc(m.category)}${m.requires_forklift ? " · forklift" : ""}${HDCatalog.isQuarry(m) ? " · truckload" : ""}</div></div>`
-  ).join("") || (s ? `<div class="empty">No match — add it under Material Book</div>` : "");
+     <div class="cat">${esc(m.category)}${m.requires_forklift ? " · forklift" : ""}${m.special ? " · special order" : ""}${m.note ? " · " + esc(m.note) : ""}</div></div>`
+  ).join("") || (s ? `<div class="empty">No match in this book — switch tabs or add it under Material Book</div>` : `<div class="empty">Type to search this book</div>`);
 }
 
 function addMaterial(id) {
   const m = db.settings.materials.find((x) => x.id === id);
   if (!m) return;
-  if (isQuarryYard() && !HDCatalog.isQuarry(m)) {
-    toast("Willow Creek is truckload quarry only");
-    return;
-  }
   let qty = Number($("mat-qty").value) || 1;
   if (HDCatalog.isQuarry(m) && qty < 1) qty = 1;
   const existing = state.draft.materials.find((x) => x.id === id);
@@ -689,14 +733,16 @@ function addMaterial(id) {
       price: m.price,
       qty,
       source: m.source,
+      book: HDCatalog.bookOf(m),
       truckload_only: m.truckload_only,
       requires_forklift: m.requires_forklift,
+      special: m.special,
+      note: m.note,
     });
   }
   if (m.requires_forklift) setTruck("forklift");
   $("mat-search").value = "";
-  $("mat-results").innerHTML = "";
-  if (isQuarryYard()) materialSearch("");
+  materialSearch("");
   renderMaterialLines();
   updateTicketChrome();
   renderQuoteBox();
@@ -717,6 +763,7 @@ function renderSettings() {
   $("s-inc").value = s.billing.incrementMinutes;
   $("s-load").value = s.billing.loadMinutes;
   $("s-unload").value = s.billing.unloadMinutes;
+  $("s-tax").value = s.billing.taxRate || 0;
   $("s-pin").value = s.security.pin;
   $("s-admin").value = s.security.adminPassword || "";
   $("s-gkey").value = s.maps.googleKey || "";
@@ -732,6 +779,14 @@ function renderSettings() {
 
 function saveSettings() {
   const s = db.settings;
+  const nextDump = Number($("s-dump").value) || 160;
+  const nextSmall = Number($("s-small").value) || 100;
+  const nextFork = Number($("s-forklift").value) || 160;
+  const nextBuf = Number($("s-mult").value);
+  const ratesChanged = nextDump !== s.billing.dumpRate || nextSmall !== s.billing.smallRate
+    || nextFork !== (s.billing.forkliftRate || s.billing.dumpRate)
+    || nextBuf !== Math.round((s.billing.dumpTimeMultiplier - 1) * 100);
+  if (ratesChanged && !confirm("Save shop rates and dump-road buffer? This changes every new ticket.")) return;
   s.company.name = $("s-company").value.trim() || s.company.name;
   s.company.email = $("s-email").value.trim();
   s.company.accountingEmail = $("s-acct").value.trim();
@@ -745,6 +800,7 @@ function saveSettings() {
   s.billing.incrementMinutes = Number($("s-inc").value) || 15;
   s.billing.loadMinutes = Number($("s-load").value) || 0;
   s.billing.unloadMinutes = Number($("s-unload").value) || 0;
+  s.billing.taxRate = Number($("s-tax").value) || 0;
   s.security.pin = $("s-pin").value.trim() || "1956";
   s.security.adminPassword = $("s-admin").value.trim() || "4357";
   s.maps.googleKey = $("s-gkey").value.trim();
@@ -758,15 +814,23 @@ function saveSettings() {
 }
 
 function renderCatalog() {
-  const rows = db.settings.materials.map((m, i) => `
+  const book = state.catalogBook || "store";
+  document.querySelectorAll("#catalog-tabs [data-book]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.book === book);
+  });
+  if ($("weight-helper")) $("weight-helper").classList.toggle("hidden", book !== "boulders");
+  const rows = db.settings.materials.map((m, i) => {
+    if (HDCatalog.bookOf(m) !== book) return "";
+    return `
     <tr>
       <td><input value="${escAttr(m.name)}" data-c="${i}" data-k="name"></td>
       <td><input value="${escAttr(m.category)}" data-c="${i}" data-k="category"></td>
       <td><input value="${escAttr(m.unit)}" data-c="${i}" data-k="unit" style="width:70px"></td>
       <td><input type="number" step="0.01" value="${m.price}" data-c="${i}" data-k="price" style="width:100px"></td>
-      <td class="muted">${HDCatalog.isQuarry(m) ? "quarry" : m.requires_forklift ? "forklift" : "yard"}</td>
+      <td class="muted">${esc(book)}${m.special ? " · special" : ""}${m.note ? " · " + esc(m.note) : ""}</td>
       <td><button class="ghost" data-cd="${i}">Delete</button></td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
   $("catalog-table").innerHTML = `<table><thead><tr><th>Material</th><th>Category</th><th>Unit</th><th>Price</th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
@@ -798,17 +862,18 @@ function addCatalogRow() {
     id: "sku-" + Date.now(),
     name: "New material",
     category: "Custom",
-    unit: "yd",
+    unit: state.catalogBook === "willow" ? "ton" : "yd",
     price: 0,
+    book: state.catalogBook || "store",
   });
   saveStore(db, true);
   renderCatalog();
 }
 
 function printPacket(kind) {
-  const ticket = saveTicket(state.draft.status || "printed");
+  const ticket = saveTicket(kind === "email" ? "emailed" : "printed");
   if (!ticket) return;
-  ticket.status = kind === "email" ? ticket.status : "printed";
+  ticket.status = kind === "email" ? "emailed" : "printed";
   const idx = db.jobs.findIndex((j) => j.id === ticket.id);
   if (idx >= 0) { db.jobs[idx].status = ticket.status; saveStore(db, true); }
   buildPrint(ticket);
@@ -861,18 +926,20 @@ function buildPrint(ticket) {
       <table>
         <tr><td>Mapped one-way</td><td>${q.oneWayMin.toFixed(1)} min · ${(ticket.route ? ticket.route.miles : 0).toFixed(1)} mi</td></tr>
         <tr><td>Trip</td><td>${q.tripFactor === 2 ? "Round trip" : "One way"} × ${q.loadCount || 1} load(s)</td></tr>
+        <tr><td>Extra site minutes</td><td>${q.extraSite || 0}</td></tr>
+        <tr><td>Extra wait minutes</td><td>${q.extraWait || 0}</td></tr>
         <tr><td>Billable time</td><td>${q.billableHours.toFixed(2)} hr @ ${HDEngine.money(q.rate)}/hr</td></tr>
         ${feeRow}
       </table>
       <div class="totals-box">
         Materials ${HDEngine.money(q.materialsTotal)}<br>
         Delivery ${HDEngine.money(q.deliveryFee)}<br>
-        ${q.forkliftFee ? "Forklift / extra fee " + HDEngine.money(q.forkliftFee) + "<br>" : ""}
+        ${q.forkliftFee ? "Forklift / extra equipment " + HDEngine.money(q.forkliftFee) + "<br>" : ""}
         ${q.tax ? "Tax " + HDEngine.money(q.tax) + "<br>" : ""}
         <strong style="font-size:22px">Total ${HDEngine.money(q.total)}</strong>
       </div>
+      <div class="recon">${esc(q.formula || "")}</div>
       <p class="muted">${esc(ticket.notes || "")}</p>
-      <p class="muted">Private dispatch ticket for Hilton internal billing and driver paperwork. Material prices per current yard book. Oregon — no sales tax unless set in Settings.</p>
     </section>
     <section class="sheet">
       <div class="sheet-head">
@@ -899,7 +966,7 @@ function buildPrint(ticket) {
         ${(ticket.materials || []).map((m) => `<tr><td>${esc(m.name)}</td><td>${m.qty} ${esc(m.unit)}</td></tr>`).join("") || "<tr><td colspan=2>See dispatcher</td></tr>"}
       </tbody></table>
       <p><strong>Notes for driver:</strong> ${esc(ticket.notes || "None")}</p>
-      <p><strong>Time:</strong> Extra site / wait ${q.extra || 0} min.
+      <p><strong>Time:</strong> Extra site ${q.extraSite || 0} min · extra wait ${q.extraWait || 0} min.
          ${q.isDump ? "Dump route buffer × " + Number(q.multiplier).toFixed(2) + " already on the ticket." : q.isForklift ? "Forklift truck — no dump buffer." : "Small truck — no dump buffer."}
          ${q.forkliftFee ? " Forklift / extra fee " + HDEngine.money(q.forkliftFee) + "." : ""}
          Driver: ${esc(ticket.driver || "unassigned")} · Unit ${esc(ticket.truckUnit || "—")}</p>
@@ -929,8 +996,10 @@ function emailAccounting(ticket) {
     `Deliver to: ${ticket.address}`,
     `Origin yard: ${yard.name} — ${yard.address}`,
     `Truck: ${truckName(ticket.truck)} @ ${HDEngine.money(q.rate)}/hr × ${q.loadCount || 1} load(s)`,
-    `Extra site / wait min: ${q.extra || 0}`,
-    q.forkliftFee ? `Forklift / extra fee: ${HDEngine.money(q.forkliftFee)}` : null,
+    `Mapped one-way: ${(q.oneWayMin || 0).toFixed(1)} min`,
+    `Extra site minutes: ${q.extraSite || 0}`,
+    `Extra wait minutes: ${q.extraWait || 0}`,
+    q.forkliftFee ? `Forklift / extra equipment fee: ${HDEngine.money(q.forkliftFee)}` : `Forklift / extra equipment fee: $0.00`,
     `Driver / unit: ${ticket.driver || "—"} / ${ticket.truckUnit || "—"}`,
     `PO: ${ticket.po || "—"}`,
     ``,
@@ -943,9 +1012,9 @@ function emailAccounting(ticket) {
     ``,
     `Notes: ${ticket.notes || "none"}`,
   ].filter((line) => line !== null).join("\n");
-  ticket.status = "sent";
+  ticket.status = "emailed";
   const idx = db.jobs.findIndex((j) => j.id === ticket.id);
-  if (idx >= 0) { db.jobs[idx].status = "sent"; saveStore(db, true); }
+  if (idx >= 0) { db.jobs[idx].status = "emailed"; saveStore(db, true); }
   const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   window.location.href = mailto;
   toast("Opened email to accounting");
@@ -1004,7 +1073,7 @@ function seedPreview() {
     id: "HD-2026-0001",
     createdAt: when,
     updatedAt: when,
-    status: "open",
+    status: "new",
     customer: "Rogue Valley Landscaping",
     phone: "541-555-0142",
     email: "",
@@ -1018,6 +1087,8 @@ function seedPreview() {
     po: "RV-4418",
     loads: 1,
     extraMinutes: 0,
+    extraSiteMinutes: 0,
+    extraWaitMinutes: 0,
     forkliftFee: 0,
     materials,
     quote,
@@ -1028,6 +1099,7 @@ function seedPreview() {
 
 async function onReady() {
   await bootStore();
+  await applyEnvGoogleKey();
   bindPin();
   $("login-btn").addEventListener("click", attemptLogin);
   $("admin-unlock").addEventListener("click", attemptAdmin);
@@ -1048,7 +1120,7 @@ async function onReady() {
   $("board-search").addEventListener("input", (e) => { state.filter = e.target.value; renderBoard(); });
   $("export-csv").addEventListener("click", exportCsv);
   $("calc-btn").addEventListener("click", calculateRoute);
-  $("save-btn").addEventListener("click", () => saveTicket("open"));
+  $("save-btn").addEventListener("click", () => saveTicket());
   $("print-inv").addEventListener("click", () => printPacket("print"));
   $("email-acct").addEventListener("click", () => printPacket("email"));
   $("f-truck-dump").addEventListener("change", () => setTruck("dump"));
@@ -1060,20 +1132,38 @@ async function onReady() {
   });
   function liveField(id, apply) {
     const el = $(id);
+    if (!el) return;
     ["input", "change", "keyup"].forEach((ev) => el.addEventListener(ev, apply));
   }
   liveField("f-loads", () => { state.draft.loads = Math.max(1, Number($("f-loads").value) || 1); renderQuoteBox(); });
-  liveField("f-extra", () => { state.draft.extraMinutes = Math.max(0, Number($("f-extra").value) || 0); renderQuoteBox(); });
+  liveField("f-site-min", () => { state.draft.extraSiteMinutes = Math.max(0, Number($("f-site-min").value) || 0); renderQuoteBox(); });
+  liveField("f-wait-min", () => { state.draft.extraWaitMinutes = Math.max(0, Number($("f-wait-min").value) || 0); renderQuoteBox(); });
   liveField("f-forklift-fee", () => { state.draft.forkliftFee = Math.max(0, Number($("f-forklift-fee").value) || 0); renderQuoteBox(); });
   liveField("f-rate", () => { state.draft.rateOverride = Number($("f-rate").value); renderQuoteBox(); });
-  liveField("f-buffer", () => { state.draft.bufferOverride = Number($("f-buffer").value); renderQuoteBox(); });
+  $("f-admin-rate").addEventListener("change", () => {
+    state.draft.adminRate = $("f-admin-rate").checked;
+    if (!state.draft.adminRate) state.draft.rateOverride = null;
+    else state.draft.rateOverride = Number($("f-rate").value) || defaultRateFor(state.draft.truck);
+    updateTicketChrome();
+    renderQuoteBox();
+  });
+  $("book-tabs").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-book]");
+    if (btn) setBook(btn.dataset.book);
+  });
+  $("catalog-tabs").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-book]");
+    if (!btn) return;
+    state.catalogBook = btn.dataset.book;
+    renderCatalog();
+  });
   $("f-address").addEventListener("input", (e) => {
     const box = $("addr-suggest");
     HDMaps.debounceSuggest(e.target.value, (hits) => {
       if (!hits.length) { box.classList.add("hidden"); box.innerHTML = ""; return; }
       box.classList.remove("hidden");
       box.innerHTML = hits.map((h) => `<div data-addr="${escAttr(h.label)}">${esc(h.label)}</div>`).join("");
-    });
+    }, db.settings.maps.googleKey);
   });
   $("addr-suggest").addEventListener("click", (e) => {
     const row = e.target.closest("[data-addr]");
@@ -1118,7 +1208,7 @@ async function onReady() {
       e.stopPropagation();
       const job = db.jobs.find((j) => j.id === dup.dataset.dup);
       if (!job) return;
-      state.draft = { ...JSON.parse(JSON.stringify(job)), id: null, createdAt: null, status: "open" };
+      state.draft = { ...JSON.parse(JSON.stringify(job)), id: null, createdAt: null, status: "new" };
       if (state.draft.forkliftFee == null) state.draft.forkliftFee = 0;
       state.route = job.route || null;
       state.quote = job.quote || null;
@@ -1133,7 +1223,7 @@ async function onReady() {
   $("save-catalog").addEventListener("click", saveCatalog);
   $("add-catalog").addEventListener("click", addCatalogRow);
   $("reload-sheet").addEventListener("click", () => {
-    if (!confirm("Restore the Aug 26, 2026 store price sheet for retail yard items? Quarry and flagstone rows stay.")) return;
+    if (!confirm("Reload published Store / Flagstone / Boulders / Willow Creek sheets? Custom rows you added stay.")) return;
     db.settings.materials = HDCatalog.reloadRetailKeepExtras(db.settings.materials);
     db.settings.priceSheet = HD_DEFAULTS.priceSheet;
     db.settings.catalogConfirmed = true;

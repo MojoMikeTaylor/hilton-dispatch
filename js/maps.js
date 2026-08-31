@@ -58,11 +58,61 @@ window.HDMaps = {
       .catch(() => []);
   },
 
-  debounceSuggest(query, cb) {
+  debounceSuggest(query, cb, googleKey) {
     clearTimeout(this._suggestTimer);
     this._suggestTimer = setTimeout(() => {
-      this.suggestNominatim(query).then(cb);
+      this.suggestAddress(query, googleKey).then(cb);
     }, 280);
+  },
+
+  async suggestAddress(query, googleKey) {
+    const q = (query || "").trim();
+    if (q.length < 3) return [];
+    const key = (googleKey || "").trim();
+    if (key) {
+      try {
+        const viaServer = await this.suggestPlacesNew(q, key);
+        if (viaServer.length) return viaServer;
+      } catch (e) { /* fall through */ }
+      try {
+        const ready = await this.ensureGoogle(key);
+        if (ready) {
+          const jsHits = await this.suggestGoogleJs(q);
+          if (jsHits.length) return jsHits;
+        }
+      } catch (e) { /* fall through */ }
+    }
+    return this.suggestNominatim(q);
+  },
+
+  suggestPlacesNew(query, key) {
+    return fetch("/api/places", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ input: query, key }),
+    }).then((res) => (res.ok ? res.json() : { suggestions: [] }))
+      .then((data) => data.suggestions || [])
+      .catch(() => []);
+  },
+
+  suggestGoogleJs(query) {
+    return new Promise((resolve) => {
+      if (!window.google || !google.maps || !google.maps.places) {
+        resolve([]);
+        return;
+      }
+      const svc = new google.maps.places.AutocompleteService();
+      svc.getPlacePredictions({
+        input: query,
+        componentRestrictions: { country: "us" },
+      }, (preds, status) => {
+        if (status !== google.maps.places.PlacesServiceStatus.OK || !preds) {
+          resolve([]);
+          return;
+        }
+        resolve(preds.map((p) => ({ label: p.description, placeId: p.place_id })));
+      });
+    });
   },
 
   routeOSRM(from, to) {

@@ -5,7 +5,8 @@
    2. Trip minutes                          = (roundtrip ? T_one * 2 : T_one) * loads
    3. Dump-truck road buffer                = dump ? tripMinutes * 1.08 : tripMinutes
                                               (8% only on road time — big truck is slower)
-   4. Site minutes                          = (loadMinutes + unloadMinutes) * loads + extraMinutes
+   4. Site minutes                          = (loadMinutes + unloadMinutes) * loads
+                                              + extra site minutes + extra wait minutes
    5. Raw hours                             = (adjustedDrive + site) / 60
    6. Billable hours                        = max(minimumHours, ceil to incrementMinutes)
    7. Delivery fee                          = billableHours * ($160 dump | $100 small | $160 forklift)
@@ -52,11 +53,16 @@ window.HDEngine = {
     materials,
     loads,
     extraMinutes,
+    extraSiteMinutes,
+    extraWaitMinutes,
     forkliftFee,
   }) {
     const b = billing || {};
     const loadCount = Math.max(1, Number(loads) || 1);
-    const extra = Math.max(0, Number(extraMinutes) || 0);
+    const extraSite = Math.max(0, Number(extraSiteMinutes) || 0);
+    const extraWait = Math.max(0, Number(extraWaitMinutes) || 0);
+    const extraLegacy = Math.max(0, Number(extraMinutes) || 0);
+    const extra = extraSite + extraWait + extraLegacy;
     const fee = Math.max(0, Number(forkliftFee) || 0);
     const oneWayMin = Math.max(0, (Number(oneWaySeconds) || 0) / 60);
     const tripFactor = (b.tripMode || "roundtrip") === "oneway" ? 1 : 2;
@@ -97,6 +103,8 @@ window.HDEngine = {
       tripFactor,
       loadCount,
       extra,
+      extraSite,
+      extraWait,
       forkliftFee: fee,
       tripMin,
       isDump,
@@ -117,7 +125,7 @@ window.HDEngine = {
       tax,
       total,
       formula: this.describe({
-        oneWayMin, tripFactor, loadCount, extra, tripMin, isDump, isForklift, multiplier,
+        oneWayMin, tripFactor, loadCount, extra, extraSite, extraWait, tripMin, isDump, isForklift, multiplier,
         adjustedDriveMin, siteMin, rawHours, billableHours, rate, deliveryFee,
         materialsTotal, forkliftFee: fee, tax, total, billing: b,
       }),
@@ -132,11 +140,16 @@ window.HDEngine = {
         ? " (no dump buffer — forklift truck)"
         : " (no buffer — small truck)";
     const loadNote = q.loadCount > 1 ? ` × ${q.loadCount} loads` : "";
+    const extraBits = [];
+    if (q.extraSite) extraBits.push(` + ${q.extraSite} extra site min`);
+    if (q.extraWait) extraBits.push(` + ${q.extraWait} extra wait min`);
+    if (!q.extraSite && !q.extraWait && q.extra) extraBits.push(` + ${q.extra} extra min`);
+    const extraNote = extraBits.join("");
     return [
       `Mapped one-way drive: ${q.oneWayMin.toFixed(1)} min`,
       `Trip mode: ${tripLabel}${loadNote} → ${q.tripMin.toFixed(1)} min road time`,
       `Drive after buffer${dumpNote}: ${q.adjustedDriveMin.toFixed(1)} min`,
-      `Yard load + site unload${loadNote}${q.extra ? ` + ${q.extra} extra min` : ""}: ${q.siteMin.toFixed(0)} min`,
+      `Yard load + site unload${loadNote}${extraNote}: ${q.siteMin.toFixed(0)} min`,
       `Raw time: ${q.rawHours.toFixed(2)} hr (${this.formatHours(q.rawHours)})`,
       `Billable (min ${q.billing.minimumHours} hr, ${q.billing.incrementMinutes}-min steps): ${q.billableHours.toFixed(2)} hr @ $${q.rate}/hr`,
       `Delivery fee: ${this.money(q.deliveryFee)}`,

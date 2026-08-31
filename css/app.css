@@ -188,6 +188,14 @@ tr.clickable:hover { background: #faf4ea; }
 .banner strong { display: block; margin-bottom: 2px; }
 .quarry-banner { background: #3b2118; color: #f3d7b5; border-color: #6b1518; }
 .fee-hot { outline: 2px solid var(--burgundy); border-radius: 10px; padding: 0 8px 8px; }
+.book-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 10px; }
+.book-tabs button {
+  background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 999px;
+  padding: 7px 12px; font-size: 13px; cursor: pointer; font-family: var(--sans);
+}
+.book-tabs button.active { background: var(--burgundy); color: #fff; border-color: var(--burgundy); }
+.inline-check { text-transform: none; letter-spacing: 0; font-size: 13px; color: var(--ink); display: flex; gap: 8px; align-items: center; margin: 10px 0 6px; }
+.inline-check input { width: auto; }
 .admin-lock {
   position: fixed; inset: 0; z-index: 90;
   display: grid; place-items: center;

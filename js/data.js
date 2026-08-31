@@ -137,70 +137,195 @@ window.HD_DEFAULTS = {
     { id: "eco-block", name: "Eco Blocks (check availability)", category: "Site materials", unit: "ea", price: 125 },
     { id: "k-rail", name: "K-Rails", category: "Site materials", unit: "ea", price: 500 },
 
-    { id: "q-dg-38-gold", name: "Decomposed Granite Screened 3/8\" minus gold", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
-    { id: "q-dg-58-gold", name: "Decomposed Granite Screened 5/8\" minus gold", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
-    { id: "q-cs-38-silver", name: "Crushed Screened Granite 3/8\" minus silver", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
-    { id: "q-34-minus", name: "3/4\" minus", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
-    { id: "q-15-minus", name: "1 1/2\" minus", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
-    { id: "q-2-minus", name: "2\" minus", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
-    { id: "q-4-minus", name: "4\" minus", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
-    { id: "q-jaw-run", name: "Jaw Run", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
-    { id: "q-ogb", name: "Open Graded Base", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
-    { id: "q-38-12-clean", name: "3/8-1/2\" clean", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
-    { id: "q-34-12-clean", name: "3/4-1/2\" clean", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
-    { id: "q-34-1-clean", name: "3/4-1\" clean", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
-    { id: "q-1-4-clean", name: "1-4\" clean", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
-    { id: "q-4-8-clean", name: "4-8\" clean", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
-    { id: "q-8-12-clean", name: "8-12\" clean", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
-    { id: "q-rip-rap", name: "Rip Rap", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
-    { id: "q-deco-rip-rap", name: "Deco Rip Rap", category: "Willow Creek quarry", unit: "ton", price: 0, source: "quarry", truckload_only: true },
+    { id: "fs-flat-az-roeder", name: "Az Roeder — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.20, book: "flagstone", requires_forklift: true },
+    { id: "fs-flat-az-rose", name: "Az Rose — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.20, book: "flagstone", requires_forklift: true },
+    { id: "fs-flat-az-chocolate", name: "Az Chocolate — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.26, book: "flagstone", requires_forklift: true },
+    { id: "fs-flat-birch-creek", name: "Birch Creek — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.27, book: "flagstone", requires_forklift: true },
+    { id: "fs-flat-cabinet-ridge", name: "Cabinet Ridge — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.27, book: "flagstone", requires_forklift: true },
+    { id: "fs-flat-cherokee", name: "Cherokee — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.27, book: "flagstone", requires_forklift: true },
+    { id: "fs-flat-copper-ridge", name: "Copper Ridge — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.27, book: "flagstone", requires_forklift: true },
+    { id: "fs-flat-ok-blue", name: "Oklahoma Blue — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.32, book: "flagstone", requires_forklift: true },
+    { id: "fs-flat-ok-brown", name: "Oklahoma Brown — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.32, book: "flagstone", requires_forklift: true },
+    { id: "fs-flat-oregon-rustic", name: "Oregon Rustic — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.25, book: "flagstone", requires_forklift: true },
+    { id: "fs-flat-sunset-charcoal", name: "Sunset Charcoal — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.25, book: "flagstone", requires_forklift: true },
+    { id: "fs-flat-sunset-gold", name: "Sunset Gold — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.25, book: "flagstone", requires_forklift: true },
+    { id: "fs-flat-sunset-silver", name: "Sunset Silver — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.25, book: "flagstone", requires_forklift: true },
+    { id: "fs-flat-sunset-white", name: "Sunset White — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.25, book: "flagstone", requires_forklift: true },
+    { id: "fs-flat-sockeye", name: "Sockeye — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.25, book: "flagstone", requires_forklift: true },
+    { id: "fs-flat-indian-paintbrush", name: "Indian Paintbrush — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.25, book: "flagstone", requires_forklift: true },
+    { id: "fs-flat-stampede", name: "Stampede — flat stack 3/4\"-1 1/2\"", category: "Flagstone / flat stack", unit: "lb", price: 0.25, book: "flagstone", requires_forklift: true },
 
-    { id: "ns-cherokee", name: "Cherokee (flat stack)", category: "Natural Stone / Flagstone", unit: "pallet", price: 0, requires_forklift: true },
-    { id: "ns-sunset-charcoal", name: "Sunset Charcoal (flat stack)", category: "Natural Stone / Flagstone", unit: "pallet", price: 0, requires_forklift: true },
-    { id: "ns-az-chocolate-standup", name: "Arizona Chocolate Stand-Up", category: "Natural Stone / Flagstone", unit: "pallet", price: 0, requires_forklift: true },
-    { id: "ns-az-roeder-standup", name: "Arizona Roeder Stand-Up", category: "Natural Stone / Flagstone", unit: "pallet", price: 0, requires_forklift: true },
-    { id: "ns-az-rose-standup", name: "Arizona Rose Stand-Up", category: "Natural Stone / Flagstone", unit: "pallet", price: 0, requires_forklift: true },
-    { id: "ns-ct-blue-standup", name: "Connecticut Blue Stand-Up", category: "Natural Stone / Flagstone", unit: "pallet", price: 0, requires_forklift: true },
-    { id: "ns-copper-ridge-standup", name: "Copper Ridge Stand-Up", category: "Natural Stone / Flagstone", unit: "pallet", price: 0, requires_forklift: true },
-    { id: "ns-ok-blue-standup", name: "Oklahoma Blue Stand-Up", category: "Natural Stone / Flagstone", unit: "pallet", price: 0, requires_forklift: true },
-    { id: "ns-az-gold-tumbled", name: "Arizona Gold Tumbled", category: "Natural Stone / Flagstone", unit: "pallet", price: 0, requires_forklift: true },
-    { id: "ns-ct-blue-tumbled", name: "Connecticut Blue Tumbled", category: "Natural Stone / Flagstone", unit: "pallet", price: 0, requires_forklift: true },
-    { id: "ns-ok-brown-tread", name: "Oklahoma Brown Tread Slab", category: "Natural Stone / Flagstone", unit: "lb", price: 0, requires_forklift: true },
-    { id: "ns-flagstone-pallet", name: "Flagstone pallet (describe on ticket)", category: "Natural Stone / Flagstone", unit: "pallet", price: 0, requires_forklift: true },
-    { id: "ns-natural-stone-pallet", name: "Natural stone pallet (describe on ticket)", category: "Natural Stone / Flagstone", unit: "pallet", price: 0, requires_forklift: true },
+    { id: "fs-ledge-az-roeder", name: "Az Roeder — ledge stone", category: "Flagstone / ledge", unit: "lb", price: 0.22, book: "flagstone", requires_forklift: true },
+    { id: "fs-ledge-az-rose", name: "Az Rose — ledge stone", category: "Flagstone / ledge", unit: "lb", price: 0.22, book: "flagstone", requires_forklift: true },
+    { id: "fs-ledge-az-chocolate", name: "Az Chocolate — ledge stone", category: "Flagstone / ledge", unit: "lb", price: 0.22, book: "flagstone", requires_forklift: true },
+    { id: "fs-ledge-birch-creek", name: "Birch Creek — ledge stone", category: "Flagstone / ledge", unit: "lb", price: 0.22, book: "flagstone", requires_forklift: true },
+    { id: "fs-ledge-cabinet-ridge", name: "Cabinet Ridge — ledge stone", category: "Flagstone / ledge", unit: "lb", price: 0.27, book: "flagstone", requires_forklift: true },
+    { id: "fs-ledge-cherokee", name: "Cherokee — ledge stone", category: "Flagstone / ledge", unit: "lb", price: 0.22, book: "flagstone", requires_forklift: true },
+    { id: "fs-ledge-copper-ridge", name: "Copper Ridge — ledge stone", category: "Flagstone / ledge", unit: "lb", price: 0.27, book: "flagstone", requires_forklift: true },
+    { id: "fs-ledge-ibex", name: "Ibex — ledge stone", category: "Flagstone / ledge", unit: "lb", price: 0.27, book: "flagstone", requires_forklift: true },
+    { id: "fs-ledge-ok-blue", name: "Oklahoma Blue — ledge stone", category: "Flagstone / ledge", unit: "lb", price: 0.30, book: "flagstone", requires_forklift: true },
+    { id: "fs-ledge-ok-brown", name: "Oklahoma Brown — ledge stone", category: "Flagstone / ledge", unit: "lb", price: 0.30, book: "flagstone", requires_forklift: true },
+    { id: "fs-ledge-oregon-rustic", name: "Oregon Rustic — ledge stone", category: "Flagstone / ledge", unit: "lb", price: 0.25, book: "flagstone", requires_forklift: true },
+    { id: "fs-ledge-honey", name: "Honey Ledge", category: "Flagstone / ledge", unit: "lb", price: 0.22, book: "flagstone", requires_forklift: true },
+    { id: "fs-ledge-sunset-silver", name: "Sunset Silver — ledge stone", category: "Flagstone / ledge", unit: "lb", price: 0.22, book: "flagstone", requires_forklift: true },
+
+    { id: "fs-tread-cabinet-ridge", name: "Cabinet Ridge — stair tread", category: "Flagstone / stair tread", unit: "lb", price: 0.32, book: "flagstone", requires_forklift: true },
+    { id: "fs-tread-sunset-silver", name: "Sunset Silver — stair tread", category: "Flagstone / stair tread", unit: "lb", price: 0.27, book: "flagstone", requires_forklift: true },
+    { id: "fs-tread-sunset-white", name: "Sunset White — stair tread", category: "Flagstone / stair tread", unit: "lb", price: 0.27, book: "flagstone", requires_forklift: true },
+    { id: "fs-tread-ok-brown", name: "Oklahoma Brown — stair tread", category: "Flagstone / stair tread", unit: "lb", price: 0.38, book: "flagstone", requires_forklift: true },
+    { id: "fs-tread-ok-blue", name: "Oklahoma Blue — stair tread", category: "Flagstone / stair tread", unit: "lb", price: 0.38, book: "flagstone", requires_forklift: true },
+
+    { id: "fs-tumbled-az-chocolate", name: "Az Chocolate — tumbled", category: "Flagstone / tumbled", unit: "lb", price: 0.32, book: "flagstone", requires_forklift: true },
+    { id: "fs-tumbled-az-gold", name: "Az Gold — tumbled", category: "Flagstone / tumbled", unit: "lb", price: 0.27, book: "flagstone", requires_forklift: true },
+    { id: "fs-tumbled-az-roeder", name: "Az Roeder — tumbled", category: "Flagstone / tumbled", unit: "lb", price: 0.27, book: "flagstone", requires_forklift: true },
+    { id: "fs-tumbled-az-rose", name: "Az Rose — tumbled", category: "Flagstone / tumbled", unit: "lb", price: 0.27, book: "flagstone", requires_forklift: true },
+    { id: "fs-tumbled-conn-blue", name: "Conn Blue — tumbled", category: "Flagstone / tumbled", unit: "lb", price: 0.32, book: "flagstone", requires_forklift: true },
+    { id: "fs-tumbled-sunset-gold-so", name: "Sunset Gold — tumbled (special order)", category: "Flagstone / tumbled", unit: "lb", price: 0, book: "flagstone", requires_forklift: true, special: true },
+    { id: "fs-tumbled-sunset-silver-so", name: "Sunset Silver — tumbled (special order)", category: "Flagstone / tumbled", unit: "lb", price: 0, book: "flagstone", requires_forklift: true, special: true },
+
+    { id: "fs-stand-az-chocolate", name: "Az Chocolate — 1\"-2\" stand up", category: "Flagstone / stand up", unit: "lb", price: 0.32, book: "flagstone", requires_forklift: true },
+    { id: "fs-stand-az-roeder", name: "Az Roeder — 1\"-2\" stand up", category: "Flagstone / stand up", unit: "lb", price: 0.22, book: "flagstone", requires_forklift: true },
+    { id: "fs-stand-az-rose", name: "Az Rose — 1\"-2\" stand up", category: "Flagstone / stand up", unit: "lb", price: 0.22, book: "flagstone", requires_forklift: true },
+    { id: "fs-stand-birch-creek", name: "Birch Creek — 1\"-2\" stand up", category: "Flagstone / stand up", unit: "lb", price: 0.32, book: "flagstone", requires_forklift: true },
+    { id: "fs-stand-cabinet-ridge", name: "Cabinet Ridge — 1\"-2\" stand up", category: "Flagstone / stand up", unit: "lb", price: 0.32, book: "flagstone", requires_forklift: true },
+    { id: "fs-stand-cherokee", name: "Cherokee — 1\"-2\" stand up", category: "Flagstone / stand up", unit: "lb", price: 0.32, book: "flagstone", requires_forklift: true },
+    { id: "fs-stand-copper-ridge", name: "Copper Ridge — 1\"-2\" stand up", category: "Flagstone / stand up", unit: "lb", price: 0.32, book: "flagstone", requires_forklift: true },
+    { id: "fs-stand-conn-blue", name: "Full Range Conn Blue — 1\"-2\" stand up", category: "Flagstone / stand up", unit: "lb", price: 0.37, book: "flagstone", requires_forklift: true },
+    { id: "fs-stand-ok-brown", name: "Oklahoma Brown — 1\"-2\" stand up", category: "Flagstone / stand up", unit: "lb", price: 0.37, book: "flagstone", requires_forklift: true },
+    { id: "fs-stand-ok-blue", name: "Oklahoma Blue — 1\"-2\" stand up", category: "Flagstone / stand up", unit: "lb", price: 0.37, book: "flagstone", requires_forklift: true },
+
+    { id: "fs-minus-copper-ridge", name: "Copper Ridge — 1\" minus stand up", category: "Flagstone / 1\" minus stand up", unit: "lb", price: 0.27, book: "flagstone", requires_forklift: true },
+    { id: "fs-minus-sunset-gold", name: "Sunset Gold — 1\" minus stand up", category: "Flagstone / 1\" minus stand up", unit: "lb", price: 0.27, book: "flagstone", requires_forklift: true },
+    { id: "fs-minus-sunset-silver", name: "Sunset Silver — 1\" minus stand up", category: "Flagstone / 1\" minus stand up", unit: "lb", price: 0.27, book: "flagstone", requires_forklift: true },
+    { id: "fs-minus-sunset-white", name: "Sunset White — 1\" minus stand up", category: "Flagstone / 1\" minus stand up", unit: "lb", price: 0.27, book: "flagstone", requires_forklift: true },
+
+    { id: "fs-slab-buckskin", name: "Buckskin slab", category: "Flagstone / slabs", unit: "lb", price: 0.30, book: "flagstone", requires_forklift: true },
+    { id: "fs-slab-oregon-rustic", name: "Oregon Rustic slab", category: "Flagstone / slabs", unit: "lb", price: 0.20, book: "flagstone", requires_forklift: true },
+
+    { id: "fs-gator-maxx2", name: "Gator Maxx2 polymeric sand 50 lb Grey/Beige (joints to 4\")", category: "Flagstone / bags", unit: "bag", price: 60, book: "flagstone" },
+    { id: "fs-gator-super", name: "Gator Super Sand 50 lb Grey/Beige (joints to 2\")", category: "Flagstone / bags", unit: "bag", price: 60, book: "flagstone" },
+    { id: "ns-flagstone-pallet", name: "Flagstone pallet (describe on ticket)", category: "Flagstone", unit: "pallet", price: 0, book: "flagstone", requires_forklift: true },
+    { id: "ns-natural-stone-pallet", name: "Natural stone pallet (describe on ticket)", category: "Flagstone", unit: "pallet", price: 0, book: "flagstone", requires_forklift: true },
+
+    { id: "br-granite-38", name: "Granite 3/8\"", category: "Granite / yd", unit: "yd", price: 65, book: "boulders" },
+    { id: "br-granite-34-minus", name: "Granite 3/4\" Minus", category: "Granite / yd", unit: "yd", price: 28, book: "boulders" },
+    { id: "br-granite-34-12-clean", name: "Granite 3/4\"x1/2\" Clean Crushed", category: "Granite / yd", unit: "yd", price: 45, book: "boulders" },
+    { id: "br-granite-15-clean", name: "1.5\" Clean Granite", category: "Granite / yd", unit: "yd", price: 45, book: "boulders" },
+    { id: "br-granite-4-minus", name: "Granite 4\" Minus", category: "Granite / yd", unit: "yd", price: 28, book: "boulders" },
+    { id: "br-rogue-valley-gold", name: "Rogue Valley Gold", category: "Granite / yd", unit: "yd", price: 65, book: "boulders" },
+    { id: "br-dg", name: "Decomposed Granite", category: "Granite / yd", unit: "yd", price: 28, book: "boulders" },
+
+    { id: "br-cobble-columbia-blue", name: "Columbia Blue cobble", category: "Cobble / lb", unit: "lb", price: 0.28, book: "boulders" },
+    { id: "br-cobble-columbia-river", name: "Columbia River cobble", category: "Cobble / lb", unit: "lb", price: 0.22, book: "boulders" },
+    { id: "br-cobble-pumice", name: "Pumice cobble", category: "Cobble / lb", unit: "lb", price: 1.00, book: "boulders" },
+    { id: "br-cobble-quartz-4", name: "Quartz Creek cobble 4\"", category: "Cobble / lb", unit: "lb", price: 0.22, book: "boulders" },
+    { id: "br-cobble-quartz-6", name: "Quartz Creek cobble 6\"", category: "Cobble / lb", unit: "lb", price: 0.22, book: "boulders" },
+    { id: "br-cobble-river-6-10", name: "River Cobble 6-10\"", category: "Cobble / lb", unit: "lb", price: 0.10, book: "boulders" },
+    { id: "br-cobble-river-10-20", name: "River Cobble 10-20\"", category: "Cobble / lb", unit: "lb", price: 0.10, book: "boulders" },
+    { id: "br-cobble-pond-mix", name: "Pond Mix", category: "Cobble / lb", unit: "lb", price: 0.10, book: "boulders" },
+    { id: "br-cobble-palm-desert", name: "Palm Desert Cobble", category: "Cobble / lb", unit: "lb", price: 0.25, book: "boulders" },
+    { id: "br-cobble-pami", name: "Pami cobble", category: "Cobble / lb", unit: "lb", price: 0.22, book: "boulders" },
+
+    { id: "br-b-basalt-column", name: "Basalt Column", category: "Boulders / lb", unit: "lb", price: 0.35, book: "boulders" },
+    { id: "br-b-basalt", name: "Basalt Boulder", category: "Boulders / lb", unit: "lb", price: 0.25, book: "boulders" },
+    { id: "br-b-blue-ridge", name: "Blue Ridge boulder", category: "Boulders / lb", unit: "lb", price: 0.18, book: "boulders" },
+    { id: "br-b-cabinet-ridge", name: "Cabinet Ridge boulder", category: "Boulders / lb", unit: "lb", price: 0.22, book: "boulders" },
+    { id: "br-b-granite-blasted", name: "Granite blasted", category: "Boulders / lb", unit: "lb", price: 0.10, book: "boulders" },
+    { id: "br-b-granite-round", name: "Granite round", category: "Boulders / lb", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "br-b-jade-green", name: "Jade Green boulder", category: "Boulders / lb", unit: "lb", price: 0.22, book: "boulders" },
+    { id: "br-b-mexi-bowl", name: "Mexi Bowl", category: "Boulders / lb", unit: "lb", price: 0.40, book: "boulders" },
+    { id: "br-b-moss-rock", name: "Moss Rock boulder", category: "Boulders / lb", unit: "lb", price: 0.15, book: "boulders" },
+    { id: "br-b-pami-rainbow", name: "Pami Rainbow boulder", category: "Boulders / lb", unit: "lb", price: 0.18, book: "boulders" },
+    { id: "br-b-quartz-creek", name: "Quartz Creek boulder", category: "Boulders / lb", unit: "lb", price: 0.22, book: "boulders" },
+    { id: "br-b-red-cinder", name: "Red Cinder boulder", category: "Boulders / lb", unit: "lb", price: 0.18, book: "boulders" },
+    { id: "br-b-siskiyou-swirl", name: "Siskiyou Swirl", category: "Boulders / lb", unit: "lb", price: 0.35, book: "boulders" },
+    { id: "br-b-sierra-moonlight", name: "Sierra Moonlight Purple boulder", category: "Boulders / lb", unit: "lb", price: 0.25, book: "boulders" },
+    { id: "br-b-palm-desert", name: "Palm Desert Gold boulder", category: "Boulders / lb", unit: "lb", price: 0.25, book: "boulders" },
+
+    { id: "br-color-blueridge", name: "Blueridge", category: "Colored rock", unit: "yd", price: 50, book: "boulders" },
+    { id: "br-color-jade-crushed", name: "Jade Green crushed", category: "Colored rock", unit: "lb", price: 0.20, book: "boulders" },
+    { id: "br-color-mexi-pebble", name: "Mexi Pebble", category: "Colored rock", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "br-color-mexi-buttons", name: "Mexi Buttons", category: "Colored rock", unit: "lb", price: 0.55, book: "boulders" },
+    { id: "br-color-aspen", name: "Aspen Mountain", category: "Colored rock", unit: "lb", price: 0.14, book: "boulders" },
+    { id: "br-color-pami", name: "Pami", category: "Colored rock", unit: "lb", price: 0.16, book: "boulders" },
+    { id: "br-color-white-silica", name: "White Silica", category: "Colored rock", unit: "lb", price: 0.18, book: "boulders" },
+    { id: "br-color-sierra-purple", name: "Sierra Moonlight Purple rock", category: "Colored rock", unit: "lb", price: 0.15, book: "boulders" },
+    { id: "br-color-palm-desert", name: "Palm Desert Gold rock", category: "Colored rock", unit: "lb", price: 0.30, book: "boulders" },
+
+    { id: "q-dg-38-gold", name: "Decomposed Granite 3/8 Minus Gold Decorative", category: "Willow Creek quarry", unit: "ton", price: 35, book: "willow", source: "quarry", truckload_only: true },
+    { id: "q-dg-34-gold", name: "Decomposed Granite 3/4 Minus Gold", category: "Willow Creek quarry", unit: "ton", price: 13.50, book: "willow", source: "quarry", truckload_only: true },
+    { id: "q-cs-38-silver", name: "Crushed Screened Granite 3/8 Minus Silver Decorative", category: "Willow Creek quarry", unit: "ton", price: 35, book: "willow", source: "quarry", truckload_only: true },
+    { id: "q-34-minus", name: "3/4 Minus", category: "Willow Creek quarry", unit: "ton", price: 13, book: "willow", source: "quarry", truckload_only: true },
+    { id: "q-15-minus", name: "1 1/2 Minus", category: "Willow Creek quarry", unit: "ton", price: 13, book: "willow", source: "quarry", truckload_only: true },
+    { id: "q-4-minus", name: "4\" Minus", category: "Willow Creek quarry", unit: "ton", price: 12.50, book: "willow", source: "quarry", truckload_only: true },
+    { id: "q-jaw-run", name: "Jaw Run", category: "Willow Creek quarry", unit: "ton", price: 12.50, book: "willow", source: "quarry", truckload_only: true },
+    { id: "q-ogb", name: "Open Grade Base", category: "Willow Creek quarry", unit: "ton", price: 24, book: "willow", source: "quarry", truckload_only: true, note: "Call for availability" },
+    { id: "q-38-12-clean", name: "3/8-1/2 Clean", category: "Willow Creek quarry", unit: "ton", price: 35, book: "willow", source: "quarry", truckload_only: true, note: "Call for availability" },
+    { id: "q-34-12-clean", name: "3/4-1/2 Clean", category: "Willow Creek quarry", unit: "ton", price: 35, book: "willow", source: "quarry", truckload_only: true, note: "Call for availability" },
+    { id: "q-34-1-clean", name: "3/4-1 Clean", category: "Willow Creek quarry", unit: "ton", price: 35, book: "willow", source: "quarry", truckload_only: true, note: "Call for availability" },
+    { id: "q-4-8-clean", name: "4\"-8\" Clean", category: "Willow Creek quarry", unit: "ton", price: 35, book: "willow", source: "quarry", truckload_only: true, note: "Call for availability" },
+    { id: "q-rip-rap", name: "Rip Rap (loaded with loader)", category: "Willow Creek quarry", unit: "ton", price: 25, book: "willow", source: "quarry", truckload_only: true },
+    { id: "q-deco-rip-rap", name: "Deco Rip Rap (loaded with excavator) — Call Mike Taylor", category: "Willow Creek quarry", unit: "ton", price: 0, book: "willow", source: "quarry", truckload_only: true, special: true, note: "Special / Call Mike Taylor" },
+    { id: "q-crushed-asphalt", name: "Crushed Asphalt", category: "Willow Creek quarry", unit: "ton", price: 20, book: "willow", source: "quarry", truckload_only: true, note: "Call for availability" },
+    { id: "q-fill-dirt-dump", name: "Fill Dirt Dump Fee", category: "Willow Creek quarry", unit: "ton", price: 4, book: "willow", source: "quarry", truckload_only: true },
   ],
+  weights: { rock: 2500, sand: 2600, bark: 900, cinder: 1500 },
 };
 
+window.HD_DEFAULTS.materials.forEach((m) => {
+  if (!m.book) m.book = "store";
+});
+
 window.HDCatalog = {
+  books: [
+    { id: "store", label: "Store" },
+    { id: "flagstone", label: "Flagstone" },
+    { id: "boulders", label: "Boulders / colored rock" },
+    { id: "willow", label: "Willow Creek" },
+  ],
+  bookOf(m) {
+    if (!m) return "store";
+    if (m.book) return m.book;
+    if (m.source === "quarry" || m.truckload_only) return "willow";
+    if (m.requires_forklift || (m.category || "").indexOf("Flagstone") >= 0) return "flagstone";
+    return "store";
+  },
   isQuarry(m) {
-    return !!(m && (m.source === "quarry" || m.truckload_only));
+    return this.bookOf(m) === "willow";
   },
   isStone(m) {
-    return !!(m && (m.requires_forklift || (m.category || "").indexOf("Flagstone") >= 0));
+    return this.bookOf(m) === "flagstone";
   },
   isRetail(m) {
-    return !this.isQuarry(m) && !this.isStone(m);
+    return this.bookOf(m) === "store";
+  },
+  inBook(m, book) {
+    return this.bookOf(m) === book;
   },
   mergeMissing(existing) {
-    const have = new Set((existing || []).map((m) => m.id));
-    const out = (existing || []).slice();
+    const have = new Map((existing || []).map((m) => [m.id, m]));
+    const out = [];
     (window.HD_DEFAULTS.materials || []).forEach((def) => {
-      if (!have.has(def.id)) out.push(JSON.parse(JSON.stringify(def)));
+      const prev = have.get(def.id);
+      if (!prev) {
+        out.push(JSON.parse(JSON.stringify(def)));
+        return;
+      }
+      const row = { ...prev, ...def };
+      if (Number(prev.price) > 0) row.price = prev.price;
+      row.book = def.book || this.bookOf(prev);
+      out.push(row);
+      have.delete(def.id);
+    });
+    have.forEach((m) => {
+      if (!m.book) m.book = this.bookOf(m);
+      out.push(m);
     });
     return out;
   },
   reloadRetailKeepExtras(existing) {
-    const keep = (existing || []).filter((m) => this.isQuarry(m) || this.isStone(m));
-    const retail = window.HD_DEFAULTS.materials.filter((m) => this.isRetail(m));
-    const extras = window.HD_DEFAULTS.materials.filter((m) => this.isQuarry(m) || this.isStone(m));
-    const out = JSON.parse(JSON.stringify(retail));
-    extras.forEach((def) => {
-      const prev = keep.find((k) => k.id === def.id);
-      out.push(prev ? prev : JSON.parse(JSON.stringify(def)));
-    });
-    keep.forEach((m) => {
-      if (!out.some((x) => x.id === m.id)) out.push(m);
-    });
-    return out;
+    const publishedIds = new Set(window.HD_DEFAULTS.materials.map((m) => m.id));
+    const extras = (existing || []).filter((m) => !publishedIds.has(m.id));
+    return JSON.parse(JSON.stringify(window.HD_DEFAULTS.materials)).concat(extras);
   },
 };

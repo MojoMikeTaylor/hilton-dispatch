@@ -119,6 +119,20 @@ assert(Math.abs(forklift.total - 290) < 0.01, "forklift delivery + fee = $290");
 assert(forklift.formula.indexOf("forklift") >= 0, "formula names forklift truck");
 assert(forklift.formula.indexOf("extra fee") >= 0, "formula shows forklift extra fee");
 
+const splitMins = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "dump",
+  billing,
+  materials: [],
+  loads: 1,
+  extraSiteMinutes: 20,
+  extraWaitMinutes: 10,
+});
+assert(Math.abs(splitMins.adjustedDriveMin - 64.8) < 0.01, "site/wait minutes are not on the dump road buffer");
+assert(Math.abs(splitMins.siteMin - 60) < 0.01, "20 site + 10 wait stack on 15+15 load/unload");
+assert(Math.abs(splitMins.extraSite - 20) < 0.01, "extra site minutes recorded");
+assert(Math.abs(splitMins.extraWait - 10) < 0.01, "extra wait minutes recorded");
+
 if (process.exitCode) {
   console.error("Engine tests failed.");
 } else {
