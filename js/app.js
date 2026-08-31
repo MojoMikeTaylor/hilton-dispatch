@@ -874,7 +874,9 @@ function saveSettings() {
   s.billing.loadMinutes = Number($("s-load").value) || 0;
   s.billing.unloadMinutes = Number($("s-unload").value) || 0;
   s.billing.taxRate = Number($("s-tax").value) || 0;
-  s.security.pin = $("s-pin").value.trim() || "1956";
+  const nextPin = $("s-pin").value.trim() || "1956";
+  const pinChanged = nextPin !== String(s.security.pin || "1956");
+  s.security.pin = nextPin;
   s.security.adminPassword = $("s-admin").value.trim() || "4357";
   s.maps.googleKey = $("s-gkey").value.trim();
   document.querySelectorAll("[data-y]").forEach((inp) => {
@@ -883,7 +885,7 @@ function saveSettings() {
     if (s.yards[i]) s.yards[i][k] = inp.value;
   });
   saveStore(db, true);
-  toast("Settings saved");
+  toast(pinChanged ? "PIN updated" : "Settings saved");
 }
 
 function renderCatalog() {
