@@ -56,6 +56,8 @@ function blankDraft() {
     billTo: "",
     ccEmail: "",
     noAccount: true,
+    cod: false,
+    jobFromAccount: false,
   };
 }
 
@@ -231,9 +233,14 @@ function accountPhone(acct) {
   return (acct && (acct.phone || acct.workPhone || acct.mobile)) || "";
 }
 
+function isReservedCashQuery(q) {
+  return /^(cash|cod|c\.o\.d\.)$/i.test(String(q || "").trim());
+}
+
 function searchCustomers(q) {
   const s = (q || "").trim().toLowerCase();
   if (s.length < 2) return [];
+  if (isReservedCashQuery(s)) return [];
   const list = db.customers || [];
   const hits = [];
   for (let i = 0; i < list.length; i++) {
@@ -247,9 +254,38 @@ function searchCustomers(q) {
   return hits;
 }
 
+function customerMatchesSelected(typed, qbName) {
+  if (!qbName) return false;
+  const t = String(typed || "").trim();
+  if (!t) return false;
+  const parts = splitQbName(qbName);
+  return t === qbName || t === parts.account;
+}
+
+function clearQbLeftovers() {
+  const jobFrom = state.draft.jobFromAccount;
+  state.draft.qbId = "";
+  state.draft.qbName = "";
+  state.draft.billTo = "";
+  state.draft.ccEmail = "";
+  state.draft.phone = "";
+  state.draft.email = "";
+  if (jobFrom) {
+    state.draft.jobName = "";
+    if ($("f-job")) $("f-job").value = "";
+  }
+  state.draft.jobFromAccount = false;
+  if (!state.draft.cod) state.draft.noAccount = true;
+  if ($("f-phone")) $("f-phone").value = "";
+  if ($("f-email")) $("f-email").value = "";
+  renderAccountStrip();
+}
+
 function applyQbAccount(acct) {
   if (!acct) return;
   const parts = splitQbName(acct.qbName);
+  state.draft.cod = false;
+  if ($("f-cod")) $("f-cod").checked = false;
   state.draft.qbId = acct.id;
   state.draft.qbName = acct.qbName;
   state.draft.customer = parts.account || acct.qbName;
@@ -258,7 +294,12 @@ function applyQbAccount(acct) {
   state.draft.noAccount = false;
   state.draft.phone = accountPhone(acct);
   state.draft.email = acct.email || "";
-  if (parts.job) state.draft.jobName = parts.job;
+  if (parts.job) {
+    state.draft.jobName = parts.job;
+    state.draft.jobFromAccount = true;
+  } else {
+    state.draft.jobFromAccount = false;
+  }
   $("f-customer").value = state.draft.customer;
   $("f-phone").value = state.draft.phone;
   $("f-email").value = state.draft.email;
@@ -268,10 +309,34 @@ function applyQbAccount(acct) {
   renderAccountStrip();
 }
 
+function setCodMode(on) {
+  state.draft.cod = !!on;
+  if ($("f-cod")) $("f-cod").checked = !!on;
+  if (on) {
+    state.draft.noAccount = true;
+    state.draft.qbId = "";
+    state.draft.qbName = "";
+    state.draft.billTo = "";
+    state.draft.ccEmail = "";
+    state.draft.jobFromAccount = false;
+    const box = $("cust-suggest");
+    if (box) { box.classList.add("hidden"); box.innerHTML = ""; }
+  } else if (!state.draft.qbName) {
+    state.draft.noAccount = true;
+  }
+  renderAccountStrip();
+}
+
 function renderAccountStrip() {
   const el = $("account-strip");
   if (!el) return;
   const d = state.draft;
+  if (d.cod) {
+    el.classList.remove("hidden");
+    el.classList.add("noacct");
+    el.innerHTML = `<div class="k">COD / no account</div><div>${esc(d.customer || "—")} — not billed to a QuickBooks account. Type the person or company, not the word Cash.</div>`;
+    return;
+  }
   if (d.qbName) {
     el.classList.remove("hidden", "noacct");
     el.innerHTML = `
@@ -282,46 +347,23 @@ function renderAccountStrip() {
       <div>${esc(d.phone || "—")}</div>`;
     return;
   }
-  if ((d.customer || "").trim()) {
-    el.classList.remove("hidden");
-    el.classList.add("noacct");
-    el.innerHTML = `<div class="k">No account</div><div>Cash / one-off — not a QuickBooks customer. Accounting will see this ticket as no account.</div>`;
-    return;
-  }
   el.classList.add("hidden");
   el.innerHTML = "";
 }
 
-function syncAccountFromCustomerField() {
+function onCustomerFieldChange() {
   const typed = ($("f-customer").value || "").trim();
+  state.draft.customer = typed;
   if (!typed) {
-    state.draft.qbId = "";
-    state.draft.qbName = "";
-    state.draft.billTo = "";
-    state.draft.ccEmail = "";
-    state.draft.noAccount = true;
-    renderAccountStrip();
+    clearQbLeftovers();
+    const box = $("cust-suggest");
+    if (box) { box.classList.add("hidden"); box.innerHTML = ""; }
     return;
   }
-  if (state.draft.qbName) {
-    const parts = splitQbName(state.draft.qbName);
-    if (typed === state.draft.qbName || typed === parts.account) {
-      state.draft.noAccount = false;
-      renderAccountStrip();
-      return;
-    }
+  if (state.draft.cod) return;
+  if (state.draft.qbName && !customerMatchesSelected(typed, state.draft.qbName)) {
+    clearQbLeftovers();
   }
-  const exact = (db.customers || []).find((a) => a.qbName === typed || splitQbName(a.qbName).account === typed);
-  if (exact) {
-    applyQbAccount(exact);
-    return;
-  }
-  state.draft.qbId = "";
-  state.draft.qbName = "";
-  state.draft.billTo = "";
-  state.draft.ccEmail = "";
-  state.draft.noAccount = true;
-  renderAccountStrip();
 }
 
 let qbEditId = null;
@@ -661,6 +703,7 @@ function renderForm() {
   const d = state.draft;
   const b = db.settings.billing;
   $("f-customer").value = d.customer;
+  if ($("f-cod")) $("f-cod").checked = !!d.cod;
   renderAccountStrip();
   $("f-phone").value = d.phone;
   $("f-email").value = d.email || "";
@@ -853,8 +896,17 @@ function collectForm() {
   state.draft.customer = $("f-customer").value.trim();
   state.draft.phone = $("f-phone").value.trim();
   state.draft.email = $("f-email").value.trim();
-  syncAccountFromCustomerField();
-  state.draft.noAccount = !state.draft.qbName;
+  state.draft.cod = !!($("f-cod") && $("f-cod").checked);
+  if (state.draft.cod) {
+    state.draft.noAccount = true;
+    state.draft.qbId = "";
+    state.draft.qbName = "";
+    state.draft.billTo = "";
+    state.draft.ccEmail = "";
+  } else {
+    onCustomerFieldChange();
+    state.draft.noAccount = !state.draft.qbName;
+  }
   state.draft.deliverOn = $("f-when").value;
   state.draft.jobName = $("f-job").value.trim();
   state.draft.address = $("f-address").value.trim();
@@ -1176,12 +1228,13 @@ function buildPrint(ticket) {
       <div class="row">
         <div>
           <strong>Sold to / QuickBooks account</strong><br>
-          ${ticket.qbName ? esc(ticket.qbName) : esc(ticket.customer) + " <em>(no account)</em>"}<br>
-          ${ticket.noAccount && !ticket.qbName ? "Cash / one-off — no QuickBooks account<br>" : ""}
-          ${esc(ticket.phone || "")}${ticket.email ? "<br>" + esc(ticket.email) : ""}${ticket.ccEmail ? "<br>CC " + esc(ticket.ccEmail) : ""}
+          ${ticket.cod || (ticket.noAccount && !ticket.qbName)
+            ? "COD / no account<br>" + esc(ticket.customer || "—")
+            : esc(ticket.qbName || ticket.customer)}<br>
+          ${esc(ticket.phone || "")}${ticket.email ? "<br>" + esc(ticket.email) : ""}${!ticket.cod && ticket.ccEmail ? "<br>CC " + esc(ticket.ccEmail) : ""}
         </div>
         <div>
-          <strong>Bill-to</strong><br>${esc(ticket.billTo || "—")}<br><br>
+          <strong>Bill-to</strong><br>${ticket.cod || !ticket.qbName ? "—" : esc(ticket.billTo || "—")}<br><br>
           <strong>Job / site</strong><br>${esc(ticket.jobName || "—")}
         </div>
       </div>
@@ -1263,8 +1316,10 @@ function emailAccounting(ticket) {
     `Ticket: ${ticket.id}`,
     quarry ? `Label: Quarry direct — truckload` : null,
     `Date: ${ticket.createdAt}`,
-    `Sold to / QuickBooks: ${ticket.qbName || ticket.customer}${ticket.noAccount && !ticket.qbName ? " (no account)" : ""}`,
-    `Bill-to: ${ticket.billTo || "—"}`,
+    ticket.cod || (ticket.noAccount && !ticket.qbName)
+      ? `Sold to: COD / no account — ${ticket.customer || "—"}`
+      : `Sold to / QuickBooks: ${ticket.qbName || ticket.customer}`,
+    `Bill-to: ${ticket.cod || !ticket.qbName ? "—" : (ticket.billTo || "—")}`,
     `Job / site: ${ticket.jobName || ""}`,
     `Deliver to (truck): ${ticket.address}`,
     `Phone: ${ticket.phone || ""}`,
@@ -1469,28 +1524,30 @@ async function onReady() {
     ).join("");
   }
   $("f-customer").addEventListener("input", (e) => {
+    onCustomerFieldChange();
     if (custHover) return;
     clearTimeout(custTimer);
     const val = e.target.value;
     custTimer = setTimeout(() => {
       if (custHover) return;
+      if (state.draft.cod || isReservedCashQuery(val)) {
+        showCustHits([]);
+        return;
+      }
       showCustHits(searchCustomers(val));
     }, 200);
   });
   $("f-customer").addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
+    if (state.draft.cod || isReservedCashQuery($("f-customer").value)) return;
     const first = document.querySelector("#cust-suggest [data-qb]");
     if (first) {
       const acct = (db.customers || []).find((a) => a.id === first.dataset.qb);
       if (acct) applyQbAccount(acct);
-    } else {
-      syncAccountFromCustomerField();
     }
   });
-  $("f-customer").addEventListener("blur", () => {
-    setTimeout(syncAccountFromCustomerField, 150);
-  });
+  $("f-cod").addEventListener("change", () => setCodMode($("f-cod").checked));
   $("cust-suggest").addEventListener("mouseenter", () => { custHover = true; });
   $("cust-suggest").addEventListener("mouseleave", () => { custHover = false; });
   $("cust-suggest").addEventListener("mousedown", (e) => {
