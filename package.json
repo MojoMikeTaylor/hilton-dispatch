@@ -1,0 +1,9 @@
+{
+  "name": "hilton-dispatch",
+  "private": true,
+  "description": "Hilton Landscape Supply dispatch — tickets, quarry truckloads, flagstone",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node js/engine.test.js && node js/catalog.test.js"
+  }
+}

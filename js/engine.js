@@ -8,10 +8,11 @@
    4. Site minutes                          = (loadMinutes + unloadMinutes) * loads + extraMinutes
    5. Raw hours                             = (adjustedDrive + site) / 60
    6. Billable hours                        = max(minimumHours, ceil to incrementMinutes)
-   7. Delivery fee                          = billableHours * ($160 dump | $100 small)
+   7. Delivery fee                          = billableHours * ($160 dump | $100 small | $160 forklift)
    8. Materials                             = Σ qty * unitPrice
-   9. Tax                                   = (delivery + materials) * taxRate   (OR default 0)
-  10. Total                                 = delivery + materials + tax
+   9. Forklift / extra fee                  = ticket dollars (default 0)
+  10. Tax                                   = (delivery + materials + fee) * taxRate   (OR default 0)
+  11. Total                                 = delivery + materials + fee + tax
 */
 
 window.HDEngine = {
@@ -51,21 +52,28 @@ window.HDEngine = {
     materials,
     loads,
     extraMinutes,
+    forkliftFee,
   }) {
     const b = billing || {};
     const loadCount = Math.max(1, Number(loads) || 1);
     const extra = Math.max(0, Number(extraMinutes) || 0);
+    const fee = Math.max(0, Number(forkliftFee) || 0);
     const oneWayMin = Math.max(0, (Number(oneWaySeconds) || 0) / 60);
     const tripFactor = (b.tripMode || "roundtrip") === "oneway" ? 1 : 2;
     const tripMin = oneWayMin * tripFactor * loadCount;
     const isDump = truck === "dump";
+    const isForklift = truck === "forklift";
     const multiplier = isDump ? Number(b.dumpTimeMultiplier) || 1.08 : 1;
     const adjustedDriveMin = tripMin * multiplier;
     const siteMin = ((Number(b.loadMinutes) || 0) + (Number(b.unloadMinutes) || 0)) * loadCount + extra;
     const rawMin = adjustedDriveMin + siteMin;
     const rawHours = rawMin / 60;
     const billableHours = this.roundUpHours(rawHours, b.minimumHours, b.incrementMinutes);
-    const rate = isDump ? Number(b.dumpRate) || 160 : Number(b.smallRate) || 100;
+    const rate = isDump
+      ? Number(b.dumpRate) || 160
+      : isForklift
+        ? Number(b.forkliftRate) || Number(b.dumpRate) || 160
+        : Number(b.smallRate) || 100;
     const deliveryFee = Number((billableHours * rate).toFixed(2));
 
     const lines = (materials || []).map((m) => {
@@ -79,7 +87,7 @@ window.HDEngine = {
       };
     });
     const materialsTotal = Number(lines.reduce((s, l) => s + l.amount, 0).toFixed(2));
-    const subtotal = deliveryFee + materialsTotal;
+    const subtotal = Number((deliveryFee + materialsTotal + fee).toFixed(2));
     const taxRate = Number(b.taxRate) || 0;
     const tax = Number((subtotal * taxRate).toFixed(2));
     const total = Number((subtotal + tax).toFixed(2));
@@ -89,8 +97,11 @@ window.HDEngine = {
       tripFactor,
       loadCount,
       extra,
+      forkliftFee: fee,
       tripMin,
       isDump,
+      isForklift,
+      truck: isDump ? "dump" : isForklift ? "forklift" : "small",
       multiplier,
       adjustedDriveMin,
       siteMin,
@@ -106,9 +117,9 @@ window.HDEngine = {
       tax,
       total,
       formula: this.describe({
-        oneWayMin, tripFactor, loadCount, extra, tripMin, isDump, multiplier,
+        oneWayMin, tripFactor, loadCount, extra, tripMin, isDump, isForklift, multiplier,
         adjustedDriveMin, siteMin, rawHours, billableHours, rate, deliveryFee,
-        materialsTotal, tax, total, billing: b,
+        materialsTotal, forkliftFee: fee, tax, total, billing: b,
       }),
     };
   },
@@ -117,7 +128,9 @@ window.HDEngine = {
     const tripLabel = q.tripFactor === 2 ? "round trip" : "one way";
     const dumpNote = q.isDump
       ? ` × ${Number(q.multiplier).toFixed(2)} dump-truck buffer`
-      : " (no buffer — small truck)";
+      : q.isForklift
+        ? " (no dump buffer — forklift truck)"
+        : " (no buffer — small truck)";
     const loadNote = q.loadCount > 1 ? ` × ${q.loadCount} loads` : "";
     return [
       `Mapped one-way drive: ${q.oneWayMin.toFixed(1)} min`,
@@ -128,6 +141,7 @@ window.HDEngine = {
       `Billable (min ${q.billing.minimumHours} hr, ${q.billing.incrementMinutes}-min steps): ${q.billableHours.toFixed(2)} hr @ $${q.rate}/hr`,
       `Delivery fee: ${this.money(q.deliveryFee)}`,
       `Materials: ${this.money(q.materialsTotal)}`,
+      q.forkliftFee ? `Forklift / extra fee: ${this.money(q.forkliftFee)}` : null,
       q.tax ? `Tax: ${this.money(q.tax)}` : null,
       `TOTAL: ${this.money(q.total)}`,
     ].filter(Boolean).join("\n");

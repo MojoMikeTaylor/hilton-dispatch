@@ -5,6 +5,7 @@ const LEGACY_KEY = "hilton-dispatch-v1";
 
 const state = {
   session: false,
+  admin: false,
   view: "board",
   draft: blankDraft(),
   quote: null,
@@ -12,6 +13,8 @@ const state = {
   map: null,
   mapLayer: null,
   filter: "",
+  persistTimer: null,
+  serverReady: false,
 };
 
 function blankDraft() {
@@ -35,16 +38,19 @@ function blankDraft() {
     po: "",
     loads: 1,
     extraMinutes: 0,
+    forkliftFee: 0,
     rateOverride: null,
     bufferOverride: null,
     deliverOn: when.toISOString().slice(0, 16),
     materials: [],
     route: null,
     quote: null,
+    quarryDirect: false,
   };
 }
 
 function normalizeStore(data) {
+  data = data || {};
   data.settings = {
     ...HD_DEFAULTS,
     ...data.settings,
@@ -53,43 +59,103 @@ function normalizeStore(data) {
     security: { ...HD_DEFAULTS.security, ...(data.settings && data.settings.security) },
     maps: { ...HD_DEFAULTS.maps, ...(data.settings && data.settings.maps) },
   };
+  if (!data.settings.security.adminPassword) data.settings.security.adminPassword = HD_DEFAULTS.security.adminPassword;
+  if (!data.settings.billing.forkliftRate) data.settings.billing.forkliftRate = HD_DEFAULTS.billing.forkliftRate;
   if (!Array.isArray(data.jobs)) data.jobs = [];
   if (!Array.isArray(data.settings.yards) || !data.settings.yards.length) data.settings.yards = HD_DEFAULTS.yards;
   const oldAcct = (data.settings.company.accountingEmail || "").toLowerCase();
   if (!oldAcct || oldAcct.indexOf("accounting@hilton") === 0) {
     data.settings.company.accountingEmail = HD_DEFAULTS.company.accountingEmail;
   }
-  if (data.settings.priceSheet !== HD_DEFAULTS.priceSheet || !Array.isArray(data.settings.materials) || !data.settings.materials.length) {
+  if (!Array.isArray(data.settings.materials) || !data.settings.materials.length) {
     data.settings.materials = JSON.parse(JSON.stringify(HD_DEFAULTS.materials));
-    data.settings.priceSheet = HD_DEFAULTS.priceSheet;
-    data.settings.catalogConfirmed = true;
+  } else {
+    data.settings.materials = HDCatalog.mergeMissing(data.settings.materials);
   }
+  data.settings.priceSheet = HD_DEFAULTS.priceSheet;
+  data.settings.catalogConfirmed = !catalogNeedsPricesFrom(data.settings.materials);
   return data;
 }
 
-function loadStore() {
+function catalogNeedsPricesFrom(materials) {
+  return (materials || []).some((m) => {
+    if (HDCatalog.isQuarry(m) || HDCatalog.isStone(m)) return false;
+    return !Number(m.price);
+  });
+}
+
+function readLocal() {
   try {
     const raw = localStorage.getItem(STORE_KEY) || localStorage.getItem(LEGACY_KEY);
-    if (!raw) return seedStore();
-    const data = normalizeStore(JSON.parse(raw));
-    saveStore(data);
-    return data;
+    if (!raw) return null;
+    return JSON.parse(raw);
   } catch (e) {
-    return seedStore();
+    return null;
   }
+}
+
+function cacheLocal(data) {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(data));
+  } catch (e) { /* quota */ }
 }
 
 function seedStore() {
-  const data = { settings: JSON.parse(JSON.stringify(HD_DEFAULTS)), jobs: [] };
-  saveStore(data);
-  return data;
+  return { settings: JSON.parse(JSON.stringify(HD_DEFAULTS)), jobs: [] };
 }
 
-function saveStore(data) {
-  localStorage.setItem(STORE_KEY, JSON.stringify(data));
+async function putStore(data) {
+  cacheLocal(data);
+  try {
+    const res = await fetch("/api/store", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ settings: data.settings, jobs: data.jobs }),
+    });
+    if (res.ok) state.serverReady = true;
+  } catch (e) {
+    state.serverReady = false;
+  }
 }
 
-let db = loadStore();
+function saveStore(data, immediate) {
+  cacheLocal(data);
+  clearTimeout(state.persistTimer);
+  if (immediate) {
+    putStore(data);
+    return;
+  }
+  state.persistTimer = setTimeout(() => putStore(data), 300);
+}
+
+async function bootStore() {
+  const local = readLocal();
+  try {
+    const res = await fetch("/api/store");
+    if (res.ok) {
+      const payload = await res.json();
+      const empty = payload.seeded || !payload.settings || (!(payload.jobs || []).length && !(payload.settings && payload.settings.materials && payload.settings.materials.length));
+      if (empty && local && ((local.jobs || []).length || (local.settings && local.settings.materials))) {
+        db = normalizeStore(local);
+        await putStore(db);
+        return;
+      }
+      if (payload.settings) {
+        db = normalizeStore(payload);
+        cacheLocal(db);
+        state.serverReady = true;
+        return;
+      }
+    }
+  } catch (e) {
+    state.serverReady = false;
+  }
+  db = normalizeStore(local || seedStore());
+  cacheLocal(db);
+  await putStore(db);
+}
+
+let db = seedStore();
 
 function toast(msg) {
   const el = document.getElementById("toast");
@@ -109,6 +175,14 @@ function yardById(id) {
   return db.settings.yards.find((y) => y.id === id) || db.settings.yards[0];
 }
 
+function isQuarryYard(id) {
+  return (id || state.draft.yardId) === "willow";
+}
+
+function ticketNeedsForklift(materials) {
+  return (materials || state.draft.materials || []).some((m) => m.requires_forklift || HDCatalog.isStone(m));
+}
+
 function $(id) { return document.getElementById(id); }
 
 function show(view) {
@@ -125,8 +199,45 @@ function show(view) {
   if (view === "catalog") renderCatalog();
 }
 
+function requestView(view) {
+  if (view === "settings") {
+    if (state.admin) show("settings");
+    else openAdminLock();
+    return;
+  }
+  if (view === "new") newTicket();
+  else show(view);
+}
+
+function openAdminLock() {
+  $("admin-lock").classList.remove("hidden");
+  $("admin-pass").value = "";
+  setTimeout(() => $("admin-pass").focus(), 50);
+}
+
+function closeAdminLock() {
+  $("admin-lock").classList.add("hidden");
+  $("admin-pass").value = "";
+}
+
+function attemptAdmin() {
+  const typed = ($("admin-pass").value || "").trim();
+  const want = String((db.settings.security && db.settings.security.adminPassword) || "4357");
+  if (typed && typed === want) {
+    state.admin = true;
+    closeAdminLock();
+    show("settings");
+  } else {
+    toast("Admin password required");
+    $("admin-pass").value = "";
+    $("admin-pass").focus();
+  }
+}
+
 function lock() {
   state.session = false;
+  state.admin = false;
+  closeAdminLock();
   $("app").classList.add("hidden");
   $("login").classList.remove("hidden");
   document.querySelectorAll(".pin-digit").forEach((i) => i.value = "");
@@ -199,7 +310,7 @@ function renderBoard() {
         ${list.map((j) => `
           <tr class="clickable" data-open="${j.id}">
             <td><strong>${j.id}</strong><div class="muted">${(j.createdAt || "").replace("T", " ").slice(0, 16)}</div></td>
-            <td>${esc(j.customer) || "—"}<div class="muted">${esc(j.address)}</div></td>
+            <td>${esc(j.customer) || "—"}${j.quarryDirect || isQuarryYard(j.yardId) ? `<div class="muted">Quarry direct — truckload</div>` : ""}<div class="muted">${esc(j.address)}</div></td>
             <td>${esc((yardById(j.yardId) || {}).name || "")}</td>
             <td><span class="badge ${j.truck}">${truckLabel(j.truck)}</span></td>
             <td>${j.quote ? HDEngine.money(j.quote.total) : "—"}</td>
@@ -215,13 +326,78 @@ function renderBoard() {
     </table>`;
 }
 
+function truckName(truck) {
+  if (truck === "forklift") return "Forklift truck";
+  if (truck === "small") return "Small truck";
+  return "Dump truck";
+}
+
 function truckLabel(truck) {
   const b = db.settings.billing;
+  if (truck === "forklift") return `Forklift $${b.forkliftRate || b.dumpRate}`;
   return truck === "dump" ? `Dump $${b.dumpRate}` : `Small $${b.smallRate}`;
 }
 
+function defaultRateFor(truck) {
+  const b = db.settings.billing;
+  if (truck === "dump") return b.dumpRate;
+  if (truck === "forklift") return b.forkliftRate || b.dumpRate || 160;
+  return b.smallRate;
+}
+
 function catalogNeedsPrices() {
-  return db.settings.materials.some((m) => !m.price);
+  return catalogNeedsPricesFrom(db.settings.materials);
+}
+
+function selectedTruck() {
+  if ($("f-truck-forklift") && $("f-truck-forklift").checked) return "forklift";
+  if ($("f-truck-small") && $("f-truck-small").checked) return "small";
+  return "dump";
+}
+
+function setTruck(truck, resetRate) {
+  state.draft.truck = truck;
+  if ($("f-truck-dump")) $("f-truck-dump").checked = truck === "dump";
+  if ($("f-truck-small")) $("f-truck-small").checked = truck === "small";
+  if ($("f-truck-forklift")) $("f-truck-forklift").checked = truck === "forklift";
+  if (resetRate !== false) {
+    const rate = defaultRateFor(truck);
+    state.draft.rateOverride = rate;
+    if ($("f-rate")) $("f-rate").value = rate;
+  }
+  updateTicketChrome();
+  renderQuoteBox();
+}
+
+function updateTicketChrome() {
+  const dump = state.draft.truck === "dump";
+  const hot = state.draft.truck === "forklift" || ticketNeedsForklift();
+  if ($("buffer-wrap")) $("buffer-wrap").classList.toggle("hidden", !dump);
+  if ($("forklift-fee-wrap")) $("forklift-fee-wrap").classList.toggle("fee-hot", hot);
+  if ($("quarry-banner")) $("quarry-banner").classList.toggle("hidden", !isQuarryYard(state.draft.yardId));
+}
+
+function applyYardRules() {
+  const quarry = isQuarryYard(state.draft.yardId);
+  state.draft.quarryDirect = quarry;
+  if (quarry) {
+    const before = state.draft.materials.length;
+    state.draft.materials = state.draft.materials.filter((m) => HDCatalog.isQuarry(m));
+    if (state.draft.materials.length !== before) {
+      toast("Willow Creek is quarry direct — retail items removed");
+      renderMaterialLines();
+    }
+  }
+  if (ticketNeedsForklift() && state.draft.truck !== "forklift") setTruck("forklift");
+  updateTicketChrome();
+  if ($("mat-search")) materialSearch($("mat-search").value);
+  renderQuoteBox();
+}
+
+function materialsForYard() {
+  const pool = db.settings.materials || [];
+  if (isQuarryYard(state.draft.yardId)) return pool.filter((m) => HDCatalog.isQuarry(m));
+  return pool.filter((m) => !HDCatalog.isQuarry(m));
 }
 
 function renderForm() {
@@ -239,41 +415,77 @@ function renderForm() {
   $("f-po").value = d.po;
   $("f-loads").value = d.loads || 1;
   $("f-extra").value = d.extraMinutes || 0;
+  $("f-forklift-fee").value = d.forkliftFee || 0;
   $("f-status").value = d.status || "open";
-  $("f-truck-dump").checked = d.truck === "dump";
-  $("f-truck-small").checked = d.truck === "small";
-  const defaultRate = d.truck === "dump" ? b.dumpRate : b.smallRate;
+  const truck = d.truck || "dump";
+  $("f-truck-dump").checked = truck === "dump";
+  $("f-truck-small").checked = truck === "small";
+  $("f-truck-forklift").checked = truck === "forklift";
+  const defaultRate = defaultRateFor(truck);
   const defaultBuf = Math.round((b.dumpTimeMultiplier - 1) * 100);
   $("f-rate").value = d.rateOverride != null ? d.rateOverride : defaultRate;
   $("f-buffer").value = d.bufferOverride != null ? d.bufferOverride : defaultBuf;
-  $("dump-rate-label").textContent = `$${b.dumpRate} / hour · +${defaultBuf}% route time · change below for this ticket`;
-  $("small-rate-label").textContent = `$${b.smallRate} / hour · mapped time · change below for this ticket`;
+  $("dump-rate-label").textContent = `$${b.dumpRate} / hour · +${defaultBuf}% route time`;
+  $("small-rate-label").textContent = `$${b.smallRate} / hour · mapped time`;
+  $("forklift-rate-label").textContent = `$${b.forkliftRate || b.dumpRate} / hour · mapped time · extra fee below`;
   $("price-banner").classList.toggle("hidden", !catalogNeedsPrices());
   const yardSel = $("f-yard");
   yardSel.innerHTML = db.settings.yards.map((y) =>
     `<option value="${y.id}" ${y.id === d.yardId ? "selected" : ""}>${y.name} — ${y.address}</option>`
   ).join("");
+  updateTicketChrome();
   renderMaterialLines();
   renderQuoteBox();
+  if (isQuarryYard(d.yardId)) materialSearch("");
 }
 
 function renderMaterialLines() {
   const wrap = $("material-lines");
   if (!state.draft.materials.length) {
-    wrap.innerHTML = `<div class="empty">No materials yet. Search the book and add yards / tons / each.</div>`;
+    wrap.innerHTML = `<div class="empty">No materials yet. Search the book and add yards / tons / pallets.</div>`;
     return;
   }
   wrap.innerHTML = `<table><thead><tr><th>Material</th><th>Qty</th><th>Unit</th><th>Price</th><th>Amount</th><th></th></tr></thead><tbody>
     ${state.draft.materials.map((m, i) => `
       <tr>
-        <td>${esc(m.name)}<div class="muted">${esc(m.category || "")}</div></td>
-        <td><input type="number" min="0" step="0.25" value="${m.qty}" data-qty="${i}" style="width:90px"></td>
-        <td>${esc(m.unit)}</td>
-        <td>${HDEngine.money(m.price)}</td>
-        <td>${HDEngine.money((Number(m.qty) || 0) * (Number(m.price) || 0))}</td>
+        <td>
+          <input value="${escAttr(m.name)}" data-line="${i}" data-k="name">
+          <div class="muted">${esc(m.category || "")}</div>
+        </td>
+        <td><input type="number" min="0" step="0.25" value="${m.qty}" data-line="${i}" data-k="qty" style="width:90px"></td>
+        <td><input value="${escAttr(m.unit)}" data-line="${i}" data-k="unit" style="width:80px"></td>
+        <td><input type="number" min="0" step="0.01" value="${m.price}" data-line="${i}" data-k="price" style="width:100px"></td>
+        <td class="line-amt" data-amt="${i}">${HDEngine.money((Number(m.qty) || 0) * (Number(m.price) || 0))}</td>
         <td><button class="ghost" data-del="${i}">Remove</button></td>
       </tr>`).join("")}
   </tbody></table>`;
+}
+
+function onLineEdit(e) {
+  const t = e.target;
+  if (t.dataset.k == null || t.dataset.line == null) return;
+  const i = Number(t.dataset.line);
+  const m = state.draft.materials[i];
+  if (!m) return;
+  const k = t.dataset.k;
+  if (k === "qty" || k === "price") m[k] = Number(t.value) || 0;
+  else m[k] = t.value;
+  if (HDCatalog.isQuarry(m) && k === "unit" && String(t.value).toLowerCase() !== "ton") {
+    m.unit = "ton";
+    t.value = "ton";
+    toast("Quarry is truckload — tons only");
+  }
+  if (HDCatalog.isQuarry(m) && k === "qty" && (Number(m.qty) || 0) < 1) {
+    m.qty = 1;
+    t.value = 1;
+  }
+  const amt = $("material-lines").querySelector(`[data-amt="${i}"]`);
+  if (amt) amt.textContent = HDEngine.money((Number(m.qty) || 0) * (Number(m.price) || 0));
+  if (m.requires_forklift && state.draft.truck !== "forklift") setTruck("forklift");
+  else {
+    updateTicketChrome();
+    renderQuoteBox();
+  }
 }
 
 function ticketBilling() {
@@ -281,6 +493,7 @@ function ticketBilling() {
   const rate = Number(state.draft.rateOverride);
   if (isFinite(rate) && rate > 0) {
     if (state.draft.truck === "dump") b.dumpRate = rate;
+    else if (state.draft.truck === "forklift") b.forkliftRate = rate;
     else b.smallRate = rate;
   }
   const buf = Number(state.draft.bufferOverride);
@@ -292,25 +505,34 @@ function ticketBilling() {
 
 function currentQuote() {
   const seconds = state.route ? state.route.seconds : 0;
-  return HDEngine.quote({
+  const q = HDEngine.quote({
     oneWaySeconds: seconds,
     truck: state.draft.truck,
     billing: ticketBilling(),
     materials: state.draft.materials,
     loads: state.draft.loads,
     extraMinutes: state.draft.extraMinutes,
+    forkliftFee: state.draft.forkliftFee,
   });
+  if (isQuarryYard(state.draft.yardId)) {
+    q.quarryDirect = true;
+    q.formula = "Quarry direct — truckload\n" + q.formula;
+  }
+  return q;
 }
 
 function renderQuoteBox() {
   const q = currentQuote();
   state.quote = q;
   const routed = !!state.route;
+  const feeBit = q.forkliftFee ? ` · ${HDEngine.money(q.forkliftFee)} forklift fee` : "";
+  const quarryBit = q.quarryDirect ? `<div style="margin-top:8px;color:#f3d7b5">Quarry direct — truckload</div>` : "";
   $("quote-box").innerHTML = `
     <div class="l muted" style="color:#d9c4a8">Delivery + materials</div>
     <div class="total">${HDEngine.money(q.total)}</div>
-    <div style="margin-top:8px">${HDEngine.money(q.deliveryFee)} delivery · ${HDEngine.money(q.materialsTotal)} materials</div>
-    <div class="break">${routed ? q.formula : "Punch the delivery address and hit Calculate route to lock time and delivery fee.\nMaterials can be added anytime."}</div>
+    <div style="margin-top:8px">${HDEngine.money(q.deliveryFee)} delivery · ${HDEngine.money(q.materialsTotal)} materials${feeBit}</div>
+    ${quarryBit}
+    <div class="break">${routed ? q.formula : "Punch the delivery address and hit Calculate route to lock time and delivery fee.\nMaterials, minutes, and fees update the total as you type."}</div>
     ${state.route ? `<div style="margin-top:10px;font-size:13px">Mapped ${state.route.miles.toFixed(1)} mi one-way via ${state.route.provider === "google" ? "Google" : "OSM / OSRM"}</div>` : ""}
   `;
 }
@@ -375,18 +597,24 @@ function collectForm() {
   state.draft.truckUnit = $("f-unit").value.trim();
   state.draft.po = $("f-po").value.trim();
   state.draft.yardId = $("f-yard").value;
-  state.draft.truck = $("f-truck-dump").checked ? "dump" : "small";
+  state.draft.truck = selectedTruck();
   state.draft.loads = Math.max(1, Number($("f-loads").value) || 1);
   state.draft.extraMinutes = Math.max(0, Number($("f-extra").value) || 0);
+  state.draft.forkliftFee = Math.max(0, Number($("f-forklift-fee").value) || 0);
   state.draft.status = $("f-status").value || "open";
   state.draft.rateOverride = Number($("f-rate").value);
   state.draft.bufferOverride = Number($("f-buffer").value);
+  state.draft.quarryDirect = isQuarryYard(state.draft.yardId);
 }
 
 function saveTicket(status) {
   collectForm();
   if (!state.draft.customer || !state.draft.address) {
     toast("Customer and delivery address are required");
+    return null;
+  }
+  if (isQuarryYard(state.draft.yardId) && state.draft.materials.some((m) => !HDCatalog.isQuarry(m))) {
+    toast("Willow Creek is quarry truckload only");
     return null;
   }
   const q = currentQuote();
@@ -399,11 +627,12 @@ function saveTicket(status) {
     status: status || state.draft.status || "open",
     quote: q,
     route: state.route,
+    quarryDirect: isQuarryYard(state.draft.yardId),
   };
   const idx = db.jobs.findIndex((j) => j.id === ticket.id);
   if (idx >= 0) db.jobs[idx] = ticket;
   else db.jobs.push(ticket);
-  saveStore(db);
+  saveStore(db, true);
   state.draft = { ...ticket };
   toast("Saved " + ticket.id);
   return ticket;
@@ -413,6 +642,7 @@ function openTicket(id) {
   const job = db.jobs.find((j) => j.id === id);
   if (!job) return;
   state.draft = JSON.parse(JSON.stringify(job));
+  if (state.draft.forkliftFee == null) state.draft.forkliftFee = 0;
   state.route = job.route || null;
   state.quote = job.quote || null;
   show("new");
@@ -428,26 +658,47 @@ function newTicket() {
 
 function materialSearch(q) {
   const s = (q || "").toLowerCase();
-  if (!s) { $("mat-results").innerHTML = ""; return; }
-  const hits = db.settings.materials.filter((m) =>
-    (m.name + " " + m.category).toLowerCase().includes(s)
-  ).slice(0, 12);
+  const pool = materialsForYard();
+  const hits = (s
+    ? pool.filter((m) => (m.name + " " + m.category).toLowerCase().includes(s))
+    : (isQuarryYard() ? pool : [])
+  ).slice(0, 16);
   $("mat-results").innerHTML = hits.map((m) =>
     `<div data-add="${m.id}"><strong>${esc(m.name)}</strong> · ${HDEngine.money(m.price)} / ${esc(m.unit)}
-     <div class="cat">${esc(m.category)}</div></div>`
-  ).join("") || `<div class="empty">No match — add it under Material Book</div>`;
+     <div class="cat">${esc(m.category)}${m.requires_forklift ? " · forklift" : ""}${HDCatalog.isQuarry(m) ? " · truckload" : ""}</div></div>`
+  ).join("") || (s ? `<div class="empty">No match — add it under Material Book</div>` : "");
 }
 
 function addMaterial(id) {
   const m = db.settings.materials.find((x) => x.id === id);
   if (!m) return;
-  const qty = Number($("mat-qty").value) || 1;
+  if (isQuarryYard() && !HDCatalog.isQuarry(m)) {
+    toast("Willow Creek is truckload quarry only");
+    return;
+  }
+  let qty = Number($("mat-qty").value) || 1;
+  if (HDCatalog.isQuarry(m) && qty < 1) qty = 1;
   const existing = state.draft.materials.find((x) => x.id === id);
   if (existing) existing.qty = Number(existing.qty) + qty;
-  else state.draft.materials.push({ id: m.id, name: m.name, category: m.category, unit: m.unit, price: m.price, qty });
+  else {
+    state.draft.materials.push({
+      id: m.id,
+      name: m.name,
+      category: m.category,
+      unit: HDCatalog.isQuarry(m) ? "ton" : m.unit,
+      price: m.price,
+      qty,
+      source: m.source,
+      truckload_only: m.truckload_only,
+      requires_forklift: m.requires_forklift,
+    });
+  }
+  if (m.requires_forklift) setTruck("forklift");
   $("mat-search").value = "";
   $("mat-results").innerHTML = "";
+  if (isQuarryYard()) materialSearch("");
   renderMaterialLines();
+  updateTicketChrome();
   renderQuoteBox();
 }
 
@@ -459,6 +710,7 @@ function renderSettings() {
   $("s-phone").value = s.company.phone;
   $("s-dump").value = s.billing.dumpRate;
   $("s-small").value = s.billing.smallRate;
+  $("s-forklift").value = s.billing.forkliftRate || s.billing.dumpRate;
   $("s-mult").value = Math.round((s.billing.dumpTimeMultiplier - 1) * 100);
   $("s-trip").value = s.billing.tripMode;
   $("s-min").value = s.billing.minimumHours;
@@ -466,6 +718,7 @@ function renderSettings() {
   $("s-load").value = s.billing.loadMinutes;
   $("s-unload").value = s.billing.unloadMinutes;
   $("s-pin").value = s.security.pin;
+  $("s-admin").value = s.security.adminPassword || "";
   $("s-gkey").value = s.maps.googleKey || "";
   $("yard-editor").innerHTML = s.yards.map((y, i) => `
     <div class="card" style="box-shadow:none;margin-bottom:10px">
@@ -485,6 +738,7 @@ function saveSettings() {
   s.company.phone = $("s-phone").value.trim();
   s.billing.dumpRate = Number($("s-dump").value) || 160;
   s.billing.smallRate = Number($("s-small").value) || 100;
+  s.billing.forkliftRate = Number($("s-forklift").value) || 160;
   s.billing.dumpTimeMultiplier = 1 + (Number($("s-mult").value) || 8) / 100;
   s.billing.tripMode = $("s-trip").value;
   s.billing.minimumHours = Number($("s-min").value) || 1;
@@ -492,13 +746,14 @@ function saveSettings() {
   s.billing.loadMinutes = Number($("s-load").value) || 0;
   s.billing.unloadMinutes = Number($("s-unload").value) || 0;
   s.security.pin = $("s-pin").value.trim() || "1956";
+  s.security.adminPassword = $("s-admin").value.trim() || "4357";
   s.maps.googleKey = $("s-gkey").value.trim();
   document.querySelectorAll("[data-y]").forEach((inp) => {
     const i = Number(inp.dataset.y);
     const k = inp.dataset.k;
     if (s.yards[i]) s.yards[i][k] = inp.value;
   });
-  saveStore(db);
+  saveStore(db, true);
   toast("Settings saved");
 }
 
@@ -509,9 +764,21 @@ function renderCatalog() {
       <td><input value="${escAttr(m.category)}" data-c="${i}" data-k="category"></td>
       <td><input value="${escAttr(m.unit)}" data-c="${i}" data-k="unit" style="width:70px"></td>
       <td><input type="number" step="0.01" value="${m.price}" data-c="${i}" data-k="price" style="width:100px"></td>
+      <td class="muted">${HDCatalog.isQuarry(m) ? "quarry" : m.requires_forklift ? "forklift" : "yard"}</td>
       <td><button class="ghost" data-cd="${i}">Delete</button></td>
     </tr>`).join("");
-  $("catalog-table").innerHTML = `<table><thead><tr><th>Material</th><th>Category</th><th>Unit</th><th>Price</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  $("catalog-table").innerHTML = `<table><thead><tr><th>Material</th><th>Category</th><th>Unit</th><th>Price</th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function onCatalogEdit(e) {
+  const inp = e.target;
+  if (inp.dataset.c == null) return;
+  const i = Number(inp.dataset.c);
+  const k = inp.dataset.k;
+  if (!db.settings.materials[i]) return;
+  db.settings.materials[i][k] = k === "price" ? Number(inp.value) || 0 : inp.value;
+  db.settings.catalogConfirmed = !catalogNeedsPrices();
+  saveStore(db, false);
 }
 
 function saveCatalog() {
@@ -522,8 +789,8 @@ function saveCatalog() {
     db.settings.materials[i][k] = k === "price" ? Number(inp.value) || 0 : inp.value;
   });
   db.settings.catalogConfirmed = !catalogNeedsPrices();
-  saveStore(db);
-  toast(catalogNeedsPrices() ? "Book saved — some prices are still $0" : "Material book saved");
+  saveStore(db, true);
+  toast(catalogNeedsPrices() ? "Book saved — some yard prices are still $0" : "Material book saved");
 }
 
 function addCatalogRow() {
@@ -534,7 +801,7 @@ function addCatalogRow() {
     unit: "yd",
     price: 0,
   });
-  saveStore(db);
+  saveStore(db, true);
   renderCatalog();
 }
 
@@ -543,7 +810,7 @@ function printPacket(kind) {
   if (!ticket) return;
   ticket.status = kind === "email" ? ticket.status : "printed";
   const idx = db.jobs.findIndex((j) => j.id === ticket.id);
-  if (idx >= 0) { db.jobs[idx].status = ticket.status; saveStore(db); }
+  if (idx >= 0) { db.jobs[idx].status = ticket.status; saveStore(db, true); }
   buildPrint(ticket);
   if (kind === "email") {
     emailAccounting(ticket);
@@ -557,11 +824,16 @@ function buildPrint(ticket) {
   const q = ticket.quote || currentQuote();
   const co = db.settings.company;
   const when = new Date(ticket.createdAt || Date.now()).toLocaleString();
+  const quarry = ticket.quarryDirect || isQuarryYard(ticket.yardId);
   const matRows = (q.lines || []).map((l) =>
     `<tr><td>${esc(l.name)}</td><td>${l.qty} ${esc(l.unit)}</td><td>${HDEngine.money(l.price)}</td><td>${HDEngine.money(l.amount)}</td></tr>`
   ).join("") || `<tr><td colspan="4">No materials</td></tr>`;
   const steps = ((ticket.route && ticket.route.steps) || []).slice(0, 18)
-    .map((s, i) => `<li>${esc(s.instruction)} <span class="muted">(${s.miles.toFixed(1)} mi)</span></li>`).join("");
+    .map((s) => `<li>${esc(s.instruction)} <span class="muted">(${s.miles.toFixed(1)} mi)</span></li>`).join("");
+  const feeRow = q.forkliftFee
+    ? `<tr><td>Forklift / extra fee</td><td>${HDEngine.money(q.forkliftFee)}</td></tr>`
+    : "";
+  const truckLine = `${truckName(ticket.truck)} @ ${HDEngine.money(q.rate)}/hr · ${q.loadCount || 1} load(s)`;
 
   $("print-root").innerHTML = `
     <section class="sheet">
@@ -571,6 +843,7 @@ function buildPrint(ticket) {
           <div>${esc(co.tagline || "")}</div>
           <div>${esc(co.phone)} · ${esc(co.email)}</div>
           <div>${esc(yard.name)} — ${esc(yard.address)}</div>
+          ${quarry ? `<div><strong>Quarry direct — truckload</strong></div>` : ""}
         </div>
         <div style="text-align:right">
           <div style="font-size:22px;font-weight:700">INVOICE ${esc(ticket.id)}</div>
@@ -580,26 +853,25 @@ function buildPrint(ticket) {
       </div>
       <div class="row">
         <div><strong>Bill To</strong><br>${esc(ticket.customer)}<br>${esc(ticket.phone)}<br>${esc(ticket.email || "")}<br>${esc(ticket.jobName)}</div>
-        <div><strong>Deliver To</strong><br>${esc(ticket.address)}<br>Truck: ${ticket.truck === "dump" ? "Dump truck" : "Small truck"} @ ${HDEngine.money(q.rate)}/hr · ${q.loadCount || 1} load(s)<br>Driver / unit: ${esc(ticket.driver || "—")} ${esc(ticket.truckUnit || "")}<br>Deliver on: ${esc(ticket.deliverOn ? ticket.deliverOn.replace("T", " ") : "—")}</div>
+        <div><strong>Deliver To</strong><br>${esc(ticket.address)}<br>Truck: ${esc(truckLine)}<br>Driver / unit: ${esc(ticket.driver || "—")} ${esc(ticket.truckUnit || "")}<br>Deliver on: ${esc(ticket.deliverOn ? ticket.deliverOn.replace("T", " ") : "—")}</div>
       </div>
       <h3 style="margin-top:18px">Materials</h3>
       <table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Amount</th></tr></thead><tbody>${matRows}</tbody></table>
       <h3 style="margin-top:18px">Delivery</h3>
       <table>
         <tr><td>Mapped one-way</td><td>${q.oneWayMin.toFixed(1)} min · ${(ticket.route ? ticket.route.miles : 0).toFixed(1)} mi</td></tr>
-        <tr><td>Trip</td><td>${q.tripFactor === 2 ? "Round trip" : "One way"} × ${q.loadCount || 1} load(s) = ${q.tripMin.toFixed(1)} min</td></tr>
-        <tr><td>Dump-truck time buffer</td><td>${q.isDump ? "Applied × " + Number(q.multiplier).toFixed(2) : "Not applied (small truck)"} → ${q.adjustedDriveMin.toFixed(1)} min</td></tr>
-        <tr><td>Load + unload + extra</td><td>${q.siteMin.toFixed(0)} min</td></tr>
+        <tr><td>Trip</td><td>${q.tripFactor === 2 ? "Round trip" : "One way"} × ${q.loadCount || 1} load(s)</td></tr>
         <tr><td>Billable time</td><td>${q.billableHours.toFixed(2)} hr @ ${HDEngine.money(q.rate)}/hr</td></tr>
+        ${feeRow}
       </table>
       <div class="totals-box">
         Materials ${HDEngine.money(q.materialsTotal)}<br>
         Delivery ${HDEngine.money(q.deliveryFee)}<br>
+        ${q.forkliftFee ? "Forklift / extra fee " + HDEngine.money(q.forkliftFee) + "<br>" : ""}
         ${q.tax ? "Tax " + HDEngine.money(q.tax) + "<br>" : ""}
         <strong style="font-size:22px">Total ${HDEngine.money(q.total)}</strong>
       </div>
       <p class="muted">${esc(ticket.notes || "")}</p>
-      <div class="recon">${esc(q.formula || "")}</div>
       <p class="muted">Private dispatch ticket for Hilton internal billing and driver paperwork. Material prices per current yard book. Oregon — no sales tax unless set in Settings.</p>
     </section>
     <section class="sheet">
@@ -607,10 +879,11 @@ function buildPrint(ticket) {
         <div>
           <h1>DRIVER ROUTE SHEET</h1>
           <div>${esc(co.name)} · ${esc(ticket.id)}</div>
+          ${quarry ? `<div><strong>Quarry direct — truckload</strong></div>` : ""}
         </div>
         <div style="text-align:right">
           <div>${when}</div>
-          <div>${ticket.truck === "dump" ? "DUMP TRUCK" : "SMALL TRUCK"}</div>
+          <div>${truckName(ticket.truck).toUpperCase()}</div>
         </div>
       </div>
       <div class="row">
@@ -626,10 +899,13 @@ function buildPrint(ticket) {
         ${(ticket.materials || []).map((m) => `<tr><td>${esc(m.name)}</td><td>${m.qty} ${esc(m.unit)}</td></tr>`).join("") || "<tr><td colspan=2>See dispatcher</td></tr>"}
       </tbody></table>
       <p><strong>Notes for driver:</strong> ${esc(ticket.notes || "None")}</p>
-      <p><strong>Route:</strong> ${(ticket.route ? ticket.route.miles.toFixed(1) : "—")} miles one-way.
-         ${q.isDump ? "Dump truck — run easy, 8% time buffer already on the ticket." : ""}
+      <p><strong>Time:</strong> Extra site / wait ${q.extra || 0} min.
+         ${q.isDump ? "Dump route buffer × " + Number(q.multiplier).toFixed(2) + " already on the ticket." : q.isForklift ? "Forklift truck — no dump buffer." : "Small truck — no dump buffer."}
+         ${q.forkliftFee ? " Forklift / extra fee " + HDEngine.money(q.forkliftFee) + "." : ""}
          Driver: ${esc(ticket.driver || "unassigned")} · Unit ${esc(ticket.truckUnit || "—")}</p>
+      <p><strong>Route:</strong> ${(ticket.route ? ticket.route.miles.toFixed(1) : "—")} miles one-way from ${esc(yard.address)}.</p>
       ${steps ? `<ol>${steps}</ol>` : `<p class="muted">Turn-by-turn prints when the OSM router is used. Google Distance Matrix still bills time/miles.</p>`}
+      <div class="recon">${esc(q.formula || "")}</div>
       <div class="sig">
         <div><div class="line">Driver signature / time out</div></div>
         <div><div class="line">Customer received by / time in</div></div>
@@ -641,16 +917,20 @@ function emailAccounting(ticket) {
   const q = ticket.quote;
   const yard = yardById(ticket.yardId);
   const to = db.settings.company.accountingEmail || db.settings.company.email;
+  const quarry = ticket.quarryDirect || isQuarryYard(ticket.yardId);
   const subject = `Hilton Dispatch ${ticket.id} — ${ticket.customer} — ${HDEngine.money(q.total)}`;
   const body = [
     `HILTON DISPATCH RECONCILIATION — send to Nick`,
     `Ticket: ${ticket.id}`,
+    quarry ? `Label: Quarry direct — truckload` : null,
     `Date: ${ticket.createdAt}`,
     `Customer: ${ticket.customer}  ${ticket.phone}`,
     `Job: ${ticket.jobName || ""}`,
     `Deliver to: ${ticket.address}`,
     `Origin yard: ${yard.name} — ${yard.address}`,
-    `Truck: ${ticket.truck === "dump" ? "Dump" : "Small"} @ ${HDEngine.money(q.rate)}/hr × ${q.loadCount || 1} load(s)`,
+    `Truck: ${truckName(ticket.truck)} @ ${HDEngine.money(q.rate)}/hr × ${q.loadCount || 1} load(s)`,
+    `Extra site / wait min: ${q.extra || 0}`,
+    q.forkliftFee ? `Forklift / extra fee: ${HDEngine.money(q.forkliftFee)}` : null,
     `Driver / unit: ${ticket.driver || "—"} / ${ticket.truckUnit || "—"}`,
     `PO: ${ticket.po || "—"}`,
     ``,
@@ -662,22 +942,23 @@ function emailAccounting(ticket) {
     `TOTAL DUE: ${HDEngine.money(q.total)}`,
     ``,
     `Notes: ${ticket.notes || "none"}`,
-  ].join("\n");
+  ].filter((line) => line !== null).join("\n");
   ticket.status = "sent";
   const idx = db.jobs.findIndex((j) => j.id === ticket.id);
-  if (idx >= 0) { db.jobs[idx].status = "sent"; saveStore(db); }
+  if (idx >= 0) { db.jobs[idx].status = "sent"; saveStore(db, true); }
   const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   window.location.href = mailto;
   toast("Opened email to accounting");
 }
 
 function exportCsv() {
-  const rows = [["ticket", "date", "customer", "phone", "address", "yard", "truck", "hours", "delivery", "materials", "total", "status"]];
+  const rows = [["ticket", "date", "customer", "phone", "address", "yard", "truck", "hours", "delivery", "materials", "forklift_fee", "total", "status"]];
   db.jobs.forEach((j) => {
     const y = yardById(j.yardId);
     rows.push([
       j.id, j.createdAt, j.customer, j.phone, j.address, y && y.name, j.truck,
-      j.quote && j.quote.billableHours, j.quote && j.quote.deliveryFee, j.quote && j.quote.materialsTotal, j.quote && j.quote.total, j.status
+      j.quote && j.quote.billableHours, j.quote && j.quote.deliveryFee, j.quote && j.quote.materialsTotal,
+      j.quote && j.quote.forkliftFee, j.quote && j.quote.total, j.status
     ]);
   });
   const csv = rows.map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -717,6 +998,7 @@ function seedPreview() {
     materials,
     loads: 1,
     extraMinutes: 0,
+    forkliftFee: 0,
   });
   db.jobs.push({
     id: "HD-2026-0001",
@@ -736,16 +1018,21 @@ function seedPreview() {
     po: "RV-4418",
     loads: 1,
     extraMinutes: 0,
+    forkliftFee: 0,
     materials,
     quote,
     route: { provider: "osrm", seconds: 18 * 60, miles: 8.4, from: { lat: 42.3916, lng: -122.9124 }, to: { lat: 42.3266, lng: -122.8756 } },
   });
-  saveStore(db);
+  saveStore(db, true);
 }
 
-function onReady() {
+async function onReady() {
+  await bootStore();
   bindPin();
   $("login-btn").addEventListener("click", attemptLogin);
+  $("admin-unlock").addEventListener("click", attemptAdmin);
+  $("admin-cancel").addEventListener("click", closeAdminLock);
+  $("admin-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") attemptAdmin(); });
   if (location.search.indexOf("preview=1") >= 0) {
     try { seedPreview(); } catch (e) { console.warn(e); }
     unlock();
@@ -754,8 +1041,8 @@ function onReady() {
     else show(view === "new" ? "new" : view);
   }
   document.querySelectorAll(".nav button").forEach((b) => b.addEventListener("click", () => {
-    if (b.dataset.go === "new") newTicket();
-    else show(b.dataset.go);
+    if (b.id === "logout") return;
+    requestView(b.dataset.go);
   }));
   $("logout").addEventListener("click", lock);
   $("board-search").addEventListener("input", (e) => { state.filter = e.target.value; renderBoard(); });
@@ -764,29 +1051,22 @@ function onReady() {
   $("save-btn").addEventListener("click", () => saveTicket("open"));
   $("print-inv").addEventListener("click", () => printPacket("print"));
   $("email-acct").addEventListener("click", () => printPacket("email"));
-  $("f-truck-dump").addEventListener("change", () => {
-    state.draft.truck = "dump";
-    $("f-rate").value = db.settings.billing.dumpRate;
-    state.draft.rateOverride = db.settings.billing.dumpRate;
-    renderQuoteBox();
+  $("f-truck-dump").addEventListener("change", () => setTruck("dump"));
+  $("f-truck-small").addEventListener("change", () => setTruck("small"));
+  $("f-truck-forklift").addEventListener("change", () => setTruck("forklift"));
+  $("f-yard").addEventListener("change", () => {
+    state.draft.yardId = $("f-yard").value;
+    applyYardRules();
   });
-  $("f-truck-small").addEventListener("change", () => {
-    state.draft.truck = "small";
-    $("f-rate").value = db.settings.billing.smallRate;
-    state.draft.rateOverride = db.settings.billing.smallRate;
-    renderQuoteBox();
-  });
-  $("f-rate").addEventListener("input", () => {
-    state.draft.rateOverride = Number($("f-rate").value);
-    renderQuoteBox();
-  });
-  $("f-buffer").addEventListener("input", () => {
-    state.draft.bufferOverride = Number($("f-buffer").value);
-    renderQuoteBox();
-  });
-  $("f-yard").addEventListener("change", () => { state.draft.yardId = $("f-yard").value; });
-  $("f-loads").addEventListener("input", () => { state.draft.loads = Math.max(1, Number($("f-loads").value) || 1); renderQuoteBox(); });
-  $("f-extra").addEventListener("input", () => { state.draft.extraMinutes = Math.max(0, Number($("f-extra").value) || 0); renderQuoteBox(); });
+  function liveField(id, apply) {
+    const el = $(id);
+    ["input", "change", "keyup"].forEach((ev) => el.addEventListener(ev, apply));
+  }
+  liveField("f-loads", () => { state.draft.loads = Math.max(1, Number($("f-loads").value) || 1); renderQuoteBox(); });
+  liveField("f-extra", () => { state.draft.extraMinutes = Math.max(0, Number($("f-extra").value) || 0); renderQuoteBox(); });
+  liveField("f-forklift-fee", () => { state.draft.forkliftFee = Math.max(0, Number($("f-forklift-fee").value) || 0); renderQuoteBox(); });
+  liveField("f-rate", () => { state.draft.rateOverride = Number($("f-rate").value); renderQuoteBox(); });
+  liveField("f-buffer", () => { state.draft.bufferOverride = Number($("f-buffer").value); renderQuoteBox(); });
   $("f-address").addEventListener("input", (e) => {
     const box = $("addr-suggest");
     HDMaps.debounceSuggest(e.target.value, (hits) => {
@@ -813,17 +1093,14 @@ function onReady() {
     const row = e.target.closest("[data-add]");
     if (row) addMaterial(row.dataset.add);
   });
-  $("material-lines").addEventListener("input", (e) => {
-    if (e.target.dataset.qty != null) {
-      const i = Number(e.target.dataset.qty);
-      state.draft.materials[i].qty = Number(e.target.value) || 0;
-      renderQuoteBox();
-    }
-  });
+  $("material-lines").addEventListener("input", onLineEdit);
+  $("material-lines").addEventListener("change", onLineEdit);
+  $("material-lines").addEventListener("keyup", onLineEdit);
   $("material-lines").addEventListener("click", (e) => {
     if (e.target.dataset.del != null) {
       state.draft.materials.splice(Number(e.target.dataset.del), 1);
       renderMaterialLines();
+      updateTicketChrome();
       renderQuoteBox();
     }
   });
@@ -833,7 +1110,7 @@ function onReady() {
       e.stopPropagation();
       const [id, status] = st.dataset.st.split("|");
       const job = db.jobs.find((j) => j.id === id);
-      if (job) { job.status = status; job.updatedAt = new Date().toISOString(); saveStore(db); renderBoard(); toast(id + " → " + status); }
+      if (job) { job.status = status; job.updatedAt = new Date().toISOString(); saveStore(db, true); renderBoard(); toast(id + " → " + status); }
       return;
     }
     const dup = e.target.closest("[data-dup]");
@@ -842,6 +1119,7 @@ function onReady() {
       const job = db.jobs.find((j) => j.id === dup.dataset.dup);
       if (!job) return;
       state.draft = { ...JSON.parse(JSON.stringify(job)), id: null, createdAt: null, status: "open" };
+      if (state.draft.forkliftFee == null) state.draft.forkliftFee = 0;
       state.route = job.route || null;
       state.quote = job.quote || null;
       show("new");
@@ -855,19 +1133,19 @@ function onReady() {
   $("save-catalog").addEventListener("click", saveCatalog);
   $("add-catalog").addEventListener("click", addCatalogRow);
   $("reload-sheet").addEventListener("click", () => {
-    if (!confirm("Replace the material book with the Aug 26, 2026 store price sheet? Custom rows you added will be removed.")) return;
-    db.settings.materials = JSON.parse(JSON.stringify(HD_DEFAULTS.materials));
+    if (!confirm("Restore the Aug 26, 2026 store price sheet for retail yard items? Quarry and flagstone rows stay.")) return;
+    db.settings.materials = HDCatalog.reloadRetailKeepExtras(db.settings.materials);
     db.settings.priceSheet = HD_DEFAULTS.priceSheet;
     db.settings.catalogConfirmed = true;
-    saveStore(db);
+    saveStore(db, true);
     renderCatalog();
-    toast("2026 price sheet loaded");
+    toast("2026 price sheet loaded — quarry and flagstone kept");
   });
   $("test-google").addEventListener("click", async () => {
     const key = $("s-gkey").value.trim();
     if (!key) { toast("Paste a Google Maps API key first"); return; }
     db.settings.maps.googleKey = key;
-    saveStore(db);
+    saveStore(db, true);
     $("test-google").disabled = true;
     $("test-google").textContent = "Testing Google…";
     try {
@@ -883,10 +1161,13 @@ function onReady() {
       $("test-google").textContent = "Test Google key";
     }
   });
+  $("catalog-table").addEventListener("input", onCatalogEdit);
+  $("catalog-table").addEventListener("change", onCatalogEdit);
+  $("catalog-table").addEventListener("keyup", onCatalogEdit);
   $("catalog-table").addEventListener("click", (e) => {
     if (e.target.dataset.cd != null) {
       db.settings.materials.splice(Number(e.target.dataset.cd), 1);
-      saveStore(db);
+      saveStore(db, true);
       renderCatalog();
     }
   });
@@ -897,8 +1178,8 @@ function onReady() {
     try {
       const data = JSON.parse(await file.text());
       if (!data.settings || !Array.isArray(data.jobs)) throw new Error("bad file");
-      db = data;
-      saveStore(db);
+      db = normalizeStore(data);
+      saveStore(db, true);
       toast("Backup restored");
       renderSettings();
       renderCatalog();

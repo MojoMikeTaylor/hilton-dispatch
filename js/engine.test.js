@@ -75,6 +75,50 @@ const short = E.quote({
 });
 assert(short.billableHours === 1, "1 hour minimum still applies on a short hop");
 
+const extraWait = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "dump",
+  billing,
+  materials: [{ name: "Topsoil", qty: 8, unit: "yd", price: 38 }],
+  loads: 1,
+  extraMinutes: 30,
+});
+assert(Math.abs(extraWait.adjustedDriveMin - 64.8) < 0.01, "extra minutes do not get the 8% dump buffer");
+assert(Math.abs(extraWait.siteMin - 60) < 0.01, "extra 30 min stacks on 15+15 load/unload");
+assert(Math.abs(extraWait.billableHours - 2.25) < 0.001, "124.8 raw min rounds to 2.25 hr");
+assert(Math.abs(extraWait.deliveryFee - 360) < 0.01, "2.25 hr × $160 = $360");
+
+const withFee = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "dump",
+  billing,
+  materials: [{ name: "Topsoil", qty: 8, unit: "yd", price: 38 }],
+  loads: 1,
+  extraMinutes: 0,
+  forkliftFee: 75,
+});
+assert(Math.abs(withFee.forkliftFee - 75) < 0.01, "forklift fee is $75");
+assert(Math.abs(withFee.deliveryFee - 280) < 0.01, "delivery still $280 with a fee");
+assert(Math.abs(withFee.materialsTotal - 304) < 0.01, "materials still $304 with a fee");
+assert(Math.abs(withFee.total - 659) < 0.01, "delivery + materials + $75 fee = $659");
+
+const forklift = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "forklift",
+  billing: { ...billing, forkliftRate: 160 },
+  materials: [],
+  loads: 1,
+  extraMinutes: 0,
+  forkliftFee: 50,
+});
+assert(Math.abs(forklift.adjustedDriveMin - 60) < 0.01, "forklift truck gets no 8% dump buffer");
+assert(Math.abs(forklift.rate - 160) < 0.01, "forklift truck is $160/hr");
+assert(Math.abs(forklift.deliveryFee - 240) < 0.01, "1.5 hr × $160 = $240");
+assert(Math.abs(forklift.forkliftFee - 50) < 0.01, "forklift extra fee sits on top of hourly");
+assert(Math.abs(forklift.total - 290) < 0.01, "forklift delivery + fee = $290");
+assert(forklift.formula.indexOf("forklift") >= 0, "formula names forklift truck");
+assert(forklift.formula.indexOf("extra fee") >= 0, "formula shows forklift extra fee");
+
 if (process.exitCode) {
   console.error("Engine tests failed.");
 } else {

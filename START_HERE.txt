@@ -3,24 +3,27 @@ HILTON DISPATCH — open this on a yard computer
 1. Double-click index.html
    or run ./serve.sh and go to http://127.0.0.1:8756
 
-2. PIN is 1956. Change it in Settings.
+2. Crew PIN is 1956. Settings admin password is 4357. Do not change the crew PIN unless Nick says so.
 
-3. Material Book is the Aug 26, 2026 store price sheet (real yard prices).
-   Rock sold by the pound on that sheet stays per lb. Change a price if the yard moves.
+3. Material Book is the Aug 26, 2026 store price sheet (real yard prices)
+   plus Willow Creek quarry (tons, $0 until Mike uploads the sheet)
+   plus flagstone / natural stone (pallet or lb, $0). Type Hilton's numbers.
+   Changing a price updates the running total immediately. Save book writes it for every yard.
 
-4. Settings — confirm:
+4. Settings (admin 4357) — confirm:
    Dump truck $160/hr
    Small truck $100/hr
-   Dump-truck extra time 8%
+   Forklift truck $160/hr
+   Dump-truck extra time 8% (road time only — not extra minutes)
    Round trip (out and back)
    Nick / dispatch email = dispatch@hiltonlandscaping.com
    Optional: paste Google Maps API key and hit Test Google key
 
 5. New ticket:
    Customer calls → punch address → pick the yard loading the truck
-   → dump or small → adjust this-ticket rate or buffer if needed
-   → add materials → Calculate route
-   → Print invoice + route sheet
-   → Email Nick / dispatch
+   Willow Creek = quarry direct, truckload tons only
+   Flagstone / slabs / standup stone defaults to Forklift truck
+   Extra site / wait MINUTES and Forklift / extra fee are on the ticket (default 0)
+   → Calculate route → Print invoice + route sheet → Email Nick / dispatch
 
-Tickets stay in this browser. Download a backup from Settings at the end of the day.
+Tickets live on the Railway server so every yard sees the same board after refresh.
