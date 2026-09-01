@@ -46,9 +46,9 @@ Willow Creek never inherits Central Point / Medford store prices. Weight helper 
 
 ## Yards
 
-- Central Point Yard — 8087 Blackwell Rd, Central Point, OR 97502 — 541-664-3374
-- Medford Yard — 5 S Stage Rd, Medford, OR 97501 — 541-600-2640
-- Willow Creek Aggregate — 4825 Old Stage Rd, Central Point, OR 97502 — 541-664-1254
+- Hilton Landscape Supply (Mothership) — 8087 Blackwell Road, Central Point, Oregon 97502 — 541-664-3374
+- Hilton Landscape Supply (Phoenix) #2 — 5 South Stage Road, Medford, Oregon 97501 — 541-600-2640
+- Willow Creek Aggregate — 4825 Old Stage Road, Central Point, Oregon 97502 — 541-664-1254
 
 ## First-run setup
 

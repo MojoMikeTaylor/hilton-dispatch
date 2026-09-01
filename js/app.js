@@ -61,6 +61,20 @@ function blankDraft() {
   };
 }
 
+function applyOfficialYards(existing) {
+  const official = HD_DEFAULTS.yards || [];
+  if (!Array.isArray(existing) || !existing.length) {
+    return JSON.parse(JSON.stringify(official));
+  }
+  return official.map((def) => {
+    const prev = existing.find((y) => y.id === def.id) || {};
+    return {
+      ...def,
+      phone: prev.phone || def.phone,
+    };
+  });
+}
+
 function normalizeStore(data) {
   data = data || {};
   data.settings = {
@@ -74,7 +88,7 @@ function normalizeStore(data) {
   if (!data.settings.security.adminPassword) data.settings.security.adminPassword = HD_DEFAULTS.security.adminPassword;
   if (!data.settings.billing.forkliftRate) data.settings.billing.forkliftRate = HD_DEFAULTS.billing.forkliftRate;
   if (!Array.isArray(data.jobs)) data.jobs = [];
-  if (!Array.isArray(data.settings.yards) || !data.settings.yards.length) data.settings.yards = HD_DEFAULTS.yards;
+  data.settings.yards = applyOfficialYards(data.settings.yards);
   const oldAcct = (data.settings.company.accountingEmail || "").toLowerCase();
   if (!oldAcct || oldAcct.indexOf("accounting@hilton") === 0) {
     data.settings.company.accountingEmail = HD_DEFAULTS.company.accountingEmail;

@@ -274,15 +274,18 @@ window.HDMaps = {
   },
 
   async route(fromAddr, toAddr, fromHint, googleKey) {
-    let from = fromHint && fromHint.lat ? { lat: fromHint.lat, lng: fromHint.lng, label: fromHint.address || fromAddr } : null;
+    let from = null;
     let to = null;
     const key = (googleKey || "").trim();
+    const hint = fromHint && fromHint.lat
+      ? { lat: fromHint.lat, lng: fromHint.lng, label: fromHint.address || fromAddr }
+      : null;
 
     if (key) {
       const ready = await this.ensureGoogle(key);
       if (ready) {
         try {
-          if (!from) from = await this.geocodeGoogle(fromAddr);
+          from = await this.geocodeGoogle(fromAddr);
           to = await this.geocodeGoogle(toAddr);
           const r = await this.routeGoogle(from, to);
           this.lastRoute = { from, to, ...r };
@@ -293,7 +296,12 @@ window.HDMaps = {
       }
     }
 
-    if (!from) from = await this.geocodeNominatim(fromAddr);
+    try {
+      from = await this.geocodeNominatim(fromAddr);
+    } catch (err) {
+      if (hint) from = hint;
+      else throw err;
+    }
     to = await this.geocodeNominatim(toAddr);
     const r = await this.routeOSRM(from, to);
     this.lastRoute = { from, to, ...r };

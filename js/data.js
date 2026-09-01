@@ -37,16 +37,16 @@ window.HD_DEFAULTS = {
   yards: [
     {
       id: "cp",
-      name: "Central Point Yard",
-      address: "8087 Blackwell Rd, Central Point, OR 97502",
+      name: "Hilton Landscape Supply (Mothership)",
+      address: "8087 Blackwell Road, Central Point, Oregon 97502",
       phone: "541-664-3374",
       lat: 42.3916,
       lng: -122.9124,
     },
     {
       id: "medford",
-      name: "Medford Yard",
-      address: "5 S Stage Rd, Medford, OR 97501",
+      name: "Hilton Landscape Supply (Phoenix) #2",
+      address: "5 South Stage Road, Medford, Oregon 97501",
       phone: "541-600-2640",
       lat: 42.3266,
       lng: -122.8747,
@@ -54,7 +54,7 @@ window.HD_DEFAULTS = {
     {
       id: "willow",
       name: "Willow Creek Aggregate",
-      address: "4825 Old Stage Rd, Central Point, OR 97502",
+      address: "4825 Old Stage Road, Central Point, Oregon 97502",
       phone: "541-664-1254",
       lat: 42.4089,
       lng: -122.9398,
