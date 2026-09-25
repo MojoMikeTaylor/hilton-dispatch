@@ -28,6 +28,9 @@ window.HD_DEFAULTS = {
     loadMinutes: 15,
     unloadMinutes: 15,
     taxRate: 0,
+    dieselPrice: 7.456,
+    dieselBaseline: 4,
+    dieselWeekOf: "2026-09-21",
   },
   maps: {
     googleKey: "",
@@ -96,20 +99,26 @@ window.HD_DEFAULTS = {
     { id: "clay-buster", name: "Clay Buster", category: "Soils", unit: "yd", price: 50 },
     { id: "worm-castings", name: "Worm Castings", category: "Soils", unit: "yd", price: 375 },
 
-    { id: "red-cinder", name: "Red Cinder (1 1/2\" or 3/8\" minus)", category: "Rock / yard", unit: "yd", price: 40 },
+    { id: "red-cinder-112", name: "Red Cinder 1 1/2\"", category: "Rock / yard", unit: "yd", price: 40 },
+    { id: "red-cinder-38-minus", name: "Red Cinder 3/8\" minus", category: "Rock / yard", unit: "yd", price: 40 },
     { id: "black-cinder", name: "Black Cinder", category: "Rock / yard", unit: "yd", price: 78 },
     { id: "fill-sand", name: "Fill Sand", category: "Rock / yard", unit: "yd", price: 48 },
     { id: "pea-gravel", name: "Pea Gravel", category: "Rock / yard", unit: "yd", price: 36 },
-    { id: "round-drain", name: "3/4\" Round – 1 1/2\" Drain", category: "Rock / yard", unit: "yd", price: 36 },
+    { id: "round-drain-34", name: "3/4\" Round drain", category: "Rock / yard", unit: "yd", price: 36 },
+    { id: "drain-112", name: "1 1/2\" Drain", category: "Rock / yard", unit: "yd", price: 36 },
     { id: "quarter-10", name: "1/4\" x #10", category: "Rock / yard", unit: "yd", price: 46 },
-    { id: "crushed-clean-river", name: "Crushed Clean River (3/4\"x1/2\" or 1/4\"x1/2\")", category: "Rock / yard", unit: "yd", price: 48 },
+    { id: "crushed-clean-river-34", name: "Crushed Clean River 3/4\"x1/2\"", category: "Rock / yard", unit: "yd", price: 48 },
+    { id: "crushed-clean-river-14", name: "Crushed Clean River 1/4\"x1/2\"", category: "Rock / yard", unit: "yd", price: 48 },
     { id: "silver-fines", name: "Silver Fines", category: "Rock / yard", unit: "yd", price: 45 },
     { id: "three-quarter-minus", name: "3/4\" Minus", category: "Rock / yard", unit: "yd", price: 28 },
-    { id: "clean-granite", name: "Clean Granite (1 1/2\"–3/4\")", category: "Rock / yard", unit: "yd", price: 45 },
+    { id: "clean-granite-112", name: "Clean Granite 1 1/2\"", category: "Rock / yard", unit: "yd", price: 45 },
+    { id: "clean-granite-34", name: "Clean Granite 3/4\"", category: "Rock / yard", unit: "yd", price: 45 },
     { id: "clean-granite-38", name: "3/8\" Clean Granite", category: "Rock / yard", unit: "yd", price: 65 },
     { id: "dg", name: "DG (Screened Granite)", category: "Rock / yard", unit: "yd", price: 28 },
     { id: "rogue-valley-gold", name: "Rogue Valley Gold", category: "Rock / yard", unit: "yd", price: 65 },
-    { id: "blue-ridge-yd", name: "Blue Ridge (1 1/2\", 3/4\", 3/4\" minus)", category: "Rock / yard", unit: "yd", price: 50 },
+    { id: "blue-ridge-112", name: "Blue Ridge 1 1/2\"", category: "Rock / yard", unit: "yd", price: 50 },
+    { id: "blue-ridge-34", name: "Blue Ridge 3/4\"", category: "Rock / yard", unit: "yd", price: 50 },
+    { id: "blue-ridge-34-minus", name: "Blue Ridge 3/4\" minus", category: "Rock / yard", unit: "yd", price: 50 },
     { id: "rhyolite", name: "Rhyolite (Pumice)", category: "Rock / yard", unit: "yd", price: 45 },
 
     { id: "beach-sand", name: "Beach Sand", category: "Rock / lb", unit: "lb", price: 0.10 },
@@ -122,7 +131,8 @@ window.HD_DEFAULTS = {
     { id: "white-silica", name: "White Silica", category: "Rock / lb", unit: "lb", price: 0.18 },
     { id: "jade-green", name: "Jade Green", category: "Rock / lb", unit: "lb", price: 0.20 },
     { id: "palm-desert", name: "Palm Desert Gold", category: "Rock / lb", unit: "lb", price: 0.30 },
-    { id: "ivans-gold", name: "Ivans Gold 3/4\" or 1 1/2\"", category: "Rock / lb", unit: "lb", price: 0.18 },
+    { id: "ivans-gold-34", name: "Ivans Gold 3/4\"", category: "Rock / lb", unit: "lb", price: 0.18 },
+    { id: "ivans-gold-112", name: "Ivans Gold 1 1/2\"", category: "Rock / lb", unit: "lb", price: 0.18 },
     { id: "mexi-pebble", name: "Mexi Pebble", category: "Rock / lb", unit: "lb", price: 0.30 },
     { id: "mexi-buttons", name: "Mexi Buttons", category: "Rock / lb", unit: "lb", price: 0.55 },
 
@@ -302,7 +312,44 @@ window.HDCatalog = {
   inBook(m, book) {
     return this.bookOf(m) === book;
   },
+  sizeSplits: [
+    { fromId: "red-cinder", childIds: ["red-cinder-112", "red-cinder-38-minus"] },
+    { fromId: "round-drain", childIds: ["round-drain-34", "drain-112"] },
+    { fromId: "crushed-clean-river", childIds: ["crushed-clean-river-34", "crushed-clean-river-14"] },
+    { fromId: "clean-granite", childIds: ["clean-granite-112", "clean-granite-34"] },
+    { fromId: "blue-ridge-yd", childIds: ["blue-ridge-112", "blue-ridge-34", "blue-ridge-34-minus"] },
+    { fromId: "ivans-gold", childIds: ["ivans-gold-34", "ivans-gold-112"] },
+  ],
+  splitCombinedSizes(existing) {
+    const splits = this.sizeSplits || [];
+    const retired = new Set(splits.map((s) => s.fromId));
+    const defs = new Map((window.HD_DEFAULTS.materials || []).map((m) => [m.id, m]));
+    const present = new Set();
+    const out = [];
+    (existing || []).forEach((m) => {
+      if (!m || retired.has(m.id)) return;
+      present.add(m.id);
+      out.push(m);
+    });
+    (existing || []).forEach((m) => {
+      if (!m || !retired.has(m.id)) return;
+      const spec = splits.find((s) => s.fromId === m.id);
+      if (!spec) return;
+      const price = Number(m.price);
+      spec.childIds.forEach((id) => {
+        if (present.has(id)) return;
+        const def = defs.get(id);
+        if (!def) return;
+        const row = JSON.parse(JSON.stringify(def));
+        if (isFinite(price)) row.price = price;
+        present.add(id);
+        out.push(row);
+      });
+    });
+    return out;
+  },
   mergeMissing(existing) {
+    existing = this.splitCombinedSizes(existing);
     const have = new Map((existing || []).map((m) => [m.id, m]));
     const out = [];
     (window.HD_DEFAULTS.materials || []).forEach((def) => {
@@ -324,8 +371,9 @@ window.HDCatalog = {
     return out;
   },
   reloadRetailKeepExtras(existing) {
+    const retired = new Set((this.sizeSplits || []).map((s) => s.fromId));
     const publishedIds = new Set(window.HD_DEFAULTS.materials.map((m) => m.id));
-    const extras = (existing || []).filter((m) => !publishedIds.has(m.id));
+    const extras = (existing || []).filter((m) => m && !publishedIds.has(m.id) && !retired.has(m.id));
     return JSON.parse(JSON.stringify(window.HD_DEFAULTS.materials)).concat(extras);
   },
 };

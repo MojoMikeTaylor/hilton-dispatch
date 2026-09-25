@@ -20,6 +20,22 @@ const state = {
   boardView: "live",
 };
 
+function lockTicketMath(draft) {
+  if (!draft) return;
+  draft.loads = 1;
+  draft.extraMinutes = 0;
+  draft.extraSiteMinutes = 0;
+  draft.extraWaitMinutes = 0;
+}
+
+function nextEiaRelease(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+  if (!m) return "";
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  d.setUTCDate(d.getUTCDate() + 8);
+  return d.toISOString().slice(0, 10);
+}
+
 function blankDraft() {
   const when = new Date();
   when.setMinutes(when.getMinutes() - when.getTimezoneOffset());
@@ -725,12 +741,7 @@ function renderForm() {
   $("f-job").value = d.jobName;
   $("f-address").value = d.address;
   $("f-notes").value = d.notes;
-  $("f-driver").value = d.driver;
-  $("f-unit").value = d.truckUnit;
-  $("f-po").value = d.po;
-  $("f-loads").value = d.loads || 1;
-  $("f-site-min").value = d.extraSiteMinutes || 0;
-  $("f-wait-min").value = d.extraWaitMinutes || 0;
+  lockTicketMath(d);
   $("f-forklift-fee").value = d.forkliftFee || 0;
   $("f-status").value = normalizeStatus(d.status);
   if ($("f-quote")) $("f-quote").checked = isQuoteStatus(d.status);
@@ -759,6 +770,7 @@ function renderForm() {
 
 function renderMaterialLines() {
   const wrap = $("material-lines");
+  if (!Array.isArray(state.draft.materials)) state.draft.materials = [];
   if (!state.draft.materials.length) {
     wrap.innerHTML = `<div class="empty">No materials yet. Search the book and add yards / tons / pallets.</div>`;
     return;
@@ -826,9 +838,6 @@ function currentQuote() {
     truck: state.draft.truck,
     billing: ticketBilling(),
     materials: state.draft.materials,
-    loads: state.draft.loads,
-    extraSiteMinutes: state.draft.extraSiteMinutes,
-    extraWaitMinutes: state.draft.extraWaitMinutes,
     forkliftFee: state.draft.forkliftFee,
   });
   if (isQuarryYard(state.draft.yardId)) {
@@ -843,13 +852,15 @@ function renderQuoteBox() {
   state.quote = q;
   const routed = !!state.route;
   const feeBit = q.forkliftFee ? ` · ${HDEngine.money(q.forkliftFee)} forklift fee` : "";
+  const week = HDEngine.weekLabel(q.dieselWeekOf) || "—";
+  const fuelBit = `${HDEngine.money(q.fuelSurcharge)} fuel surcharge (${HDEngine.percentText(q.surchargePercent)} of delivery · week of ${week})`;
   const quarryBit = q.quarryDirect ? `<div style="margin-top:8px;color:#f3d7b5">Quarry direct — truckload</div>` : "";
   $("quote-box").innerHTML = `
-    <div class="l muted" style="color:#d9c4a8">Delivery + materials</div>
+    <div class="l muted" style="color:#d9c4a8">Delivery + materials + fuel</div>
     <div class="total">${HDEngine.money(q.total)}</div>
-    <div style="margin-top:8px">${HDEngine.money(q.deliveryFee)} delivery · ${HDEngine.money(q.materialsTotal)} materials${feeBit}</div>
+    <div style="margin-top:8px">${HDEngine.money(q.deliveryFee)} delivery · ${HDEngine.money(q.materialsTotal)} materials${feeBit} · ${fuelBit}</div>
     ${quarryBit}
-    <div class="break">${routed ? q.formula : "Punch the delivery address and hit Calculate route to lock time and delivery fee.\nMaterials, minutes, and fees update the total as you type."}</div>
+    <div class="break">${routed ? q.formula : "Punch the delivery address and hit Calculate route to lock time and delivery fee.\nMaterials and the forklift fee update the total as you type. Fuel surcharge uses the diesel price in Settings.\nWeek of " + week + "."}</div>
     ${state.route ? `<div style="margin-top:10px;font-size:13px">Mapped ${state.route.miles.toFixed(1)} mi one-way via ${state.route.provider === "google" ? "Google" : "OSM / OSRM"}</div>` : ""}
   `;
 }
@@ -925,15 +936,9 @@ function collectForm() {
   state.draft.jobName = $("f-job").value.trim();
   state.draft.address = $("f-address").value.trim();
   state.draft.notes = $("f-notes").value.trim();
-  state.draft.driver = $("f-driver").value.trim();
-  state.draft.truckUnit = $("f-unit").value.trim();
-  state.draft.po = $("f-po").value.trim();
   state.draft.yardId = $("f-yard").value;
   state.draft.truck = selectedTruck();
-  state.draft.loads = Math.max(1, Number($("f-loads").value) || 1);
-  state.draft.extraSiteMinutes = Math.max(0, Number($("f-site-min").value) || 0);
-  state.draft.extraWaitMinutes = Math.max(0, Number($("f-wait-min").value) || 0);
-  state.draft.extraMinutes = state.draft.extraSiteMinutes + state.draft.extraWaitMinutes;
+  lockTicketMath(state.draft);
   state.draft.forkliftFee = Math.max(0, Number($("f-forklift-fee").value) || 0);
   if ($("f-quote") && $("f-quote").checked) state.draft.status = "quote";
   else {
@@ -1005,9 +1010,9 @@ function openTicket(id) {
   const job = db.jobs.find((j) => j.id === id);
   if (!job) return;
   state.draft = JSON.parse(JSON.stringify(job));
+  if (!Array.isArray(state.draft.materials)) state.draft.materials = [];
   if (state.draft.forkliftFee == null) state.draft.forkliftFee = 0;
-  if (state.draft.extraSiteMinutes == null) state.draft.extraSiteMinutes = 0;
-  if (state.draft.extraWaitMinutes == null) state.draft.extraWaitMinutes = Number(state.draft.extraMinutes) || 0;
+  lockTicketMath(state.draft);
   state.draft.status = normalizeStatus(state.draft.status);
   state.route = job.route || null;
   state.quote = job.quote || null;
@@ -1067,6 +1072,47 @@ function addMaterial(id) {
   renderQuoteBox();
 }
 
+function renderDieselNext() {
+  const el = $("s-diesel-next");
+  if (!el) return;
+  const week = ($("s-diesel-week") && $("s-diesel-week").value) || (db.settings.billing.dieselWeekOf || "");
+  const next = nextEiaRelease(week);
+  const label = HDEngine.weekLabel(next);
+  el.textContent = label
+    ? "Next EIA release " + label + ". West Coast PADD 5 on-highway diesel, all types."
+    : "West Coast PADD 5 on-highway diesel, all types.";
+}
+
+async function pullEiaWeek() {
+  const input = $("s-diesel");
+  const typed = input ? input.value : "";
+  const btn = $("pull-eia");
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch("/api/eia-diesel");
+    const data = await res.json();
+    if (!data || !data.ok || !(Number(data.dieselPrice) > 0)) {
+      if (input) input.value = typed;
+      toast("EIA did not answer — kept the typed diesel price");
+      return;
+    }
+    const price = Number(data.dieselPrice);
+    const week = data.weekOf || db.settings.billing.dieselWeekOf || "";
+    if (input) input.value = String(price);
+    if ($("s-diesel-week") && week) $("s-diesel-week").value = String(week).slice(0, 10);
+    db.settings.billing.dieselPrice = price;
+    if (week) db.settings.billing.dieselWeekOf = String(week).slice(0, 10);
+    saveStore(db, true);
+    renderDieselNext();
+    toast("EIA week of " + (HDEngine.weekLabel(week) || week) + " · $" + price.toFixed(3) + "/gal");
+  } catch (e) {
+    if (input) input.value = typed;
+    toast("EIA did not answer — kept the typed diesel price");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function renderSettings() {
   const s = db.settings;
   $("s-company").value = s.company.name;
@@ -1083,6 +1129,10 @@ function renderSettings() {
   $("s-load").value = s.billing.loadMinutes;
   $("s-unload").value = s.billing.unloadMinutes;
   $("s-tax").value = s.billing.taxRate || 0;
+  $("s-diesel").value = s.billing.dieselPrice != null ? s.billing.dieselPrice : "";
+  $("s-diesel-base").value = s.billing.dieselBaseline != null ? s.billing.dieselBaseline : "";
+  $("s-diesel-week").value = String(s.billing.dieselWeekOf || "").slice(0, 10);
+  renderDieselNext();
   $("s-pin").value = s.security.pin;
   $("s-admin").value = s.security.adminPassword || "";
   $("s-gkey").value = s.maps.googleKey || "";
@@ -1120,6 +1170,16 @@ function saveSettings() {
   s.billing.loadMinutes = Number($("s-load").value) || 0;
   s.billing.unloadMinutes = Number($("s-unload").value) || 0;
   s.billing.taxRate = Number($("s-tax").value) || 0;
+  const dieselRaw = $("s-diesel").value.trim();
+  const baseRaw = $("s-diesel-base").value.trim();
+  const weekRaw = $("s-diesel-week").value;
+  if (dieselRaw !== "" && isFinite(Number(dieselRaw)) && Number(dieselRaw) >= 0) {
+    s.billing.dieselPrice = Number(dieselRaw);
+  }
+  if (baseRaw !== "" && isFinite(Number(baseRaw)) && Number(baseRaw) >= 0) {
+    s.billing.dieselBaseline = Number(baseRaw);
+  }
+  if (weekRaw) s.billing.dieselWeekOf = weekRaw;
   const nextPin = $("s-pin").value.trim() || "1956";
   const pinChanged = nextPin !== String(s.security.pin || "1956");
   s.security.pin = nextPin;
@@ -1221,7 +1281,9 @@ function buildPrint(ticket) {
   const feeRow = q.forkliftFee
     ? `<tr><td>Forklift / extra fee</td><td>${HDEngine.money(q.forkliftFee)}</td></tr>`
     : "";
-  const truckLine = `${truckName(ticket.truck)} @ ${HDEngine.money(q.rate)}/hr · ${q.loadCount || 1} load(s)`;
+  const truckLine = `${truckName(ticket.truck)} @ ${HDEngine.money(q.rate)}/hr`;
+  const weekLabel = HDEngine.weekLabel(q.dieselWeekOf) || "—";
+  const fuelRow = `<tr><td>Fuel surcharge</td><td>${HDEngine.percentText(q.surchargePercent)} of delivery · week of ${esc(weekLabel)} · ${HDEngine.dollarsPerGal(q.dieselPrice, 3)}/gal</td></tr>`;
 
   $("print-root").innerHTML = `
     <section class="sheet">
@@ -1236,7 +1298,7 @@ function buildPrint(ticket) {
         <div style="text-align:right">
           <div style="font-size:22px;font-weight:700">${isQuoteStatus(ticket.status) ? "QUOTE" : "INVOICE"} ${esc(ticket.id)}</div>
           <div>${when}</div>
-          <div>PO: ${esc(ticket.po || "—")}</div>
+          <div>Diesel week of ${esc(weekLabel)}</div>
         </div>
       </div>
       <div class="row">
@@ -1253,7 +1315,7 @@ function buildPrint(ticket) {
         </div>
       </div>
       <div class="row" style="margin-top:12px">
-        <div><strong>Deliver to (truck)</strong><br>${esc(ticket.address)}<br>Truck: ${esc(truckLine)}<br>Driver / unit: ${esc(ticket.driver || "—")} ${esc(ticket.truckUnit || "")}<br>Deliver on: ${esc(ticket.deliverOn ? ticket.deliverOn.replace("T", " ") : "—")}</div>
+        <div><strong>Deliver to (truck)</strong><br>${esc(ticket.address)}<br>Truck: ${esc(truckLine)}<br>Deliver on: ${esc(ticket.deliverOn ? ticket.deliverOn.replace("T", " ") : "—")}</div>
         <div></div>
       </div>
       <h3 style="margin-top:18px">Materials</h3>
@@ -1261,16 +1323,16 @@ function buildPrint(ticket) {
       <h3 style="margin-top:18px">Delivery</h3>
       <table>
         <tr><td>Mapped one-way</td><td>${q.oneWayMin.toFixed(1)} min · ${(ticket.route ? ticket.route.miles : 0).toFixed(1)} mi</td></tr>
-        <tr><td>Trip</td><td>${q.tripFactor === 2 ? "Round trip" : "One way"} × ${q.loadCount || 1} load(s)</td></tr>
-        <tr><td>Extra site minutes</td><td>${q.extraSite || 0}</td></tr>
-        <tr><td>Extra wait minutes</td><td>${q.extraWait || 0}</td></tr>
+        <tr><td>Trip</td><td>${q.tripFactor === 2 ? "Round trip" : "One way"}</td></tr>
         <tr><td>Billable time</td><td>${q.billableHours.toFixed(2)} hr @ ${HDEngine.money(q.rate)}/hr</td></tr>
         ${feeRow}
+        ${fuelRow}
       </table>
       <div class="totals-box">
         Materials ${HDEngine.money(q.materialsTotal)}<br>
         Delivery ${HDEngine.money(q.deliveryFee)}<br>
         ${q.forkliftFee ? "Forklift / extra equipment " + HDEngine.money(q.forkliftFee) + "<br>" : ""}
+        Fuel surcharge ${HDEngine.money(q.fuelSurcharge)} (${HDEngine.percentText(q.surchargePercent)} of delivery)<br>
         ${q.tax ? "Tax " + HDEngine.money(q.tax) + "<br>" : ""}
         <strong style="font-size:22px">Total ${HDEngine.money(q.total)}</strong>
       </div>
@@ -1294,18 +1356,17 @@ function buildPrint(ticket) {
           <strong>Load at</strong><br>${esc(yard.name)}<br>${esc(yard.address)}<br>${esc(yard.phone)}
         </div>
         <div>
-          <strong>Deliver to</strong><br>${esc(ticket.customer)} · ${esc(ticket.phone)}<br>${esc(ticket.address)}<br>${esc(ticket.jobName)}<br>Window: ${esc(ticket.deliverOn ? ticket.deliverOn.replace("T", " ") : "—")} · ${q.loadCount || 1} load(s)
+          <strong>Deliver to</strong><br>${esc(ticket.customer)} · ${esc(ticket.phone)}<br>${esc(ticket.address)}<br>${esc(ticket.jobName)}<br>Window: ${esc(ticket.deliverOn ? ticket.deliverOn.replace("T", " ") : "—")}
         </div>
       </div>
       <h3>Load</h3>
       <table><thead><tr><th>Material</th><th>Qty</th></tr></thead><tbody>
         ${(ticket.materials || []).map((m) => `<tr><td>${esc(m.name)}</td><td>${m.qty} ${esc(m.unit)}</td></tr>`).join("") || "<tr><td colspan=2>See dispatcher</td></tr>"}
       </tbody></table>
-      <p><strong>Notes for driver:</strong> ${esc(ticket.notes || "None")}</p>
-      <p><strong>Time:</strong> Extra site ${q.extraSite || 0} min · extra wait ${q.extraWait || 0} min.
+      <p><strong>Notes:</strong> ${esc(ticket.notes || "None")}</p>
+      <p><strong>Time:</strong>
          ${q.isDump ? "Dump route buffer × " + Number(q.multiplier).toFixed(2) + " already on the ticket." : q.isForklift ? "Forklift truck — no dump buffer." : "Small truck — no dump buffer."}
-         ${q.forkliftFee ? " Forklift / extra fee " + HDEngine.money(q.forkliftFee) + "." : ""}
-         Driver: ${esc(ticket.driver || "unassigned")} · Unit ${esc(ticket.truckUnit || "—")}</p>
+         ${q.forkliftFee ? " Forklift / extra fee " + HDEngine.money(q.forkliftFee) + "." : ""}</p>
       <p><strong>Route:</strong> ${(ticket.route ? ticket.route.miles.toFixed(1) : "—")} miles one-way from ${esc(yard.address)}.</p>
       ${steps ? `<ol>${steps}</ol>` : `<p class="muted">Turn-by-turn prints when the OSM router is used. Google Distance Matrix still bills time/miles.</p>`}
       <div class="recon">${esc(q.formula || "")}</div>
@@ -1339,13 +1400,10 @@ function emailAccounting(ticket) {
     `Phone: ${ticket.phone || ""}`,
     `Email: ${ticket.email || ""}${ticket.ccEmail ? "  CC " + ticket.ccEmail : ""}`,
     `Origin yard: ${yard.name} — ${yard.address}`,
-    `Truck: ${truckName(ticket.truck)} @ ${HDEngine.money(q.rate)}/hr × ${q.loadCount || 1} load(s)`,
+    `Truck: ${truckName(ticket.truck)} @ ${HDEngine.money(q.rate)}/hr`,
     `Mapped one-way: ${(q.oneWayMin || 0).toFixed(1)} min`,
-    `Extra site minutes: ${q.extraSite || 0}`,
-    `Extra wait minutes: ${q.extraWait || 0}`,
     q.forkliftFee ? `Forklift / extra equipment fee: ${HDEngine.money(q.forkliftFee)}` : `Forklift / extra equipment fee: $0.00`,
-    `Driver / unit: ${ticket.driver || "—"} / ${ticket.truckUnit || "—"}`,
-    `PO: ${ticket.po || "—"}`,
+    `Diesel week of ${HDEngine.weekLabel(q.dieselWeekOf) || "—"}`,
     ``,
     q.formula,
     ``,
@@ -1367,13 +1425,13 @@ function emailAccounting(ticket) {
 }
 
 function exportCsv() {
-  const rows = [["ticket", "date", "customer", "phone", "address", "yard", "truck", "hours", "delivery", "materials", "forklift_fee", "total", "status"]];
+  const rows = [["ticket", "date", "customer", "phone", "address", "yard", "truck", "hours", "delivery", "materials", "forklift_fee", "fuel_surcharge", "total", "status"]];
   db.jobs.forEach((j) => {
     const y = yardById(j.yardId);
     rows.push([
       j.id, j.createdAt, j.customer, j.phone, j.address, y && y.name, j.truck,
       j.quote && j.quote.billableHours, j.quote && j.quote.deliveryFee, j.quote && j.quote.materialsTotal,
-      j.quote && j.quote.forkliftFee, j.quote && j.quote.total, j.status
+      j.quote && j.quote.forkliftFee, j.quote && j.quote.fuelSurcharge, j.quote && j.quote.total, j.status
     ]);
   });
   const csv = rows.map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -1428,9 +1486,6 @@ function seedPreview() {
     notes: "Dump at the end of the drive. Call 10 minutes out. Stay off new asphalt.",
     yardId: "cp",
     truck: "dump",
-    driver: "Carlos",
-    truckUnit: "DT-12",
-    po: "RV-4418",
     loads: 1,
     extraMinutes: 0,
     extraSiteMinutes: 0,
@@ -1499,9 +1554,6 @@ async function onReady() {
     if (!el) return;
     ["input", "change", "keyup"].forEach((ev) => el.addEventListener(ev, apply));
   }
-  liveField("f-loads", () => { state.draft.loads = Math.max(1, Number($("f-loads").value) || 1); renderQuoteBox(); });
-  liveField("f-site-min", () => { state.draft.extraSiteMinutes = Math.max(0, Number($("f-site-min").value) || 0); renderQuoteBox(); });
-  liveField("f-wait-min", () => { state.draft.extraWaitMinutes = Math.max(0, Number($("f-wait-min").value) || 0); renderQuoteBox(); });
   liveField("f-forklift-fee", () => { state.draft.forkliftFee = Math.max(0, Number($("f-forklift-fee").value) || 0); renderQuoteBox(); });
   liveField("f-rate", () => { state.draft.rateOverride = Number($("f-rate").value); renderQuoteBox(); });
   $("f-admin-rate").addEventListener("change", () => {
@@ -1665,6 +1717,7 @@ async function onReady() {
       if (!job) return;
       state.draft = { ...JSON.parse(JSON.stringify(job)), id: null, createdAt: null, status: "new" };
       if (state.draft.forkliftFee == null) state.draft.forkliftFee = 0;
+      lockTicketMath(state.draft);
       state.route = job.route || null;
       state.quote = job.quote || null;
       show("new");
@@ -1675,6 +1728,8 @@ async function onReady() {
     if (row) openTicket(row.dataset.open);
   });
   $("save-settings").addEventListener("click", saveSettings);
+  if ($("pull-eia")) $("pull-eia").addEventListener("click", pullEiaWeek);
+  if ($("s-diesel-week")) $("s-diesel-week").addEventListener("change", renderDieselNext);
   $("save-catalog").addEventListener("click", saveCatalog);
   $("add-catalog").addEventListener("click", addCatalogRow);
   $("reload-sheet").addEventListener("click", () => {

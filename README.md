@@ -2,14 +2,14 @@
 
 Private yard app for **Hilton Landscape Supply / Hilton Trucking**. Shop-floor tool. Not a public customer portal.
 
-Crew takes the call, punches the delivery address, picks the loading yard, maps the route, adds materials from the correct book, adds extra site/wait minutes and optional forklift fee, prints invoice + routing paperwork, and emails Nick at **dispatch@hiltonlandscaping.com**.
+Crew takes the call, punches the delivery address, picks the loading yard, maps the route, adds materials from the correct book, adds an optional forklift fee, prints invoice + routing paperwork, and emails Nick at **dispatch@hiltonlandscaping.com**.
 
 ## Daily workflow
 
 1. Customer calls. Hit **New ticket**.
 2. Name, phone, delivery address, which yard is loading the truck.
 3. Dump truck ($160/hr) or small truck ($100/hr). Forklift truck is optional for palletized stone. The dump-road buffer stays in Settings.
-4. Loads (1 = one out-and-back). Extra site minutes and extra wait minutes default to **0**. Forklift / extra equipment $ defaults to **0**.
+4. Billing is always **1 load**. Extra site minutes and extra wait minutes are **0**. Forklift / extra equipment $ defaults to **0**. A driver or PO goes in Notes. Fuel surcharge is a percent of the delivery fee from Settings (West Coast PADD 5 diesel vs the baseline).
 5. Search the **active material tab** (Store, Flagstone, Boulders / colored rock, Willow Creek). Choosing Willow Creek as origin defaults the picker to the Willow Creek tab. Crew can switch tabs on purpose.
 6. **Calculate route** — map draws, delivery fee locks, status becomes Routed.
 7. **Print invoice + route sheet** — page 1 full math for accounting, page 2 driver sheet.
@@ -21,15 +21,16 @@ Crew takes the call, punches the delivery address, picks the loading yard, maps 
 Printed on every invoice.
 
 1. Map one-way drive minutes from the chosen yard to the job (Google if a key is saved; else OpenStreetMap + OSRM).
-2. Trip minutes = (roundtrip ? one-way × 2 : one-way) × loads.
+2. Trip minutes = roundtrip ? one-way × 2 : one-way. Always 1 load.
 3. Dump truck: multiply **road** minutes by the admin dump-road buffer (default 1.08). Small / forklift trucks use mapped road time.
-4. Site minutes = (load + unload) × loads + extra site minutes + extra wait minutes.
+4. Site minutes = load + unload. Extra minutes are 0.
 5. Raw hours = (adjusted road + site) / 60.
 6. Billable hours = max(1 hour, round up to 15 minutes).
 7. Delivery fee = billable hours × $160 dump / $100 small / $160 forklift (or admin rates).
-8. Materials = qty × book price.
+8. Materials = qty × book price. Materials are not fuel-surcharged.
 9. Forklift / extra equipment fee = the dollar amount typed on the ticket.
-10. Total = delivery + materials + forklift fee. Oregon tax off unless admin turns it on.
+10. surchargePercent = max(0, (dieselThisWeek − baseline) / baseline). fuelSurcharge = delivery fee × that percent. Baseline defaults to $4.00/gal. Diesel this week is the EIA West Coast PADD 5 on-highway price (week of 21 Sep 2026 is $7.456).
+11. Total = delivery + materials + forklift fee + fuel surcharge. Oregon tax off unless admin turns it on.
 
 Totals update as you type. Save persists the ticket and the book.
 

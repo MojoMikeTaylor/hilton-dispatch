@@ -118,16 +118,6 @@
               <label class="choice"><input id="f-truck-forklift" type="radio" name="truck" /><span><strong>Forklift truck</strong><em id="forklift-rate-label">$160 / hour · extra fee below</em></span></label>
             </div>
             <div class="row-3">
-              <div><label>Driver</label><input id="f-driver" type="text" /></div>
-              <div><label>Truck unit</label><input id="f-unit" type="text" /></div>
-              <div><label>PO / ref</label><input id="f-po" type="text" /></div>
-            </div>
-            <div class="row-3">
-              <div><label>Loads</label><input id="f-loads" type="number" min="1" step="1" value="1" /></div>
-              <div><label>Extra site minutes</label><input id="f-site-min" type="number" min="0" step="5" value="0" /></div>
-              <div><label>Extra wait minutes</label><input id="f-wait-min" type="number" min="0" step="5" value="0" /></div>
-            </div>
-            <div class="row-3">
               <div id="forklift-fee-wrap">
                 <label>Forklift / extra equipment $</label>
                 <input id="f-forklift-fee" type="number" min="0" step="1" value="0" />
@@ -150,9 +140,9 @@
               </div>
             </div>
             <label class="inline-check"><input id="f-quote" type="checkbox" /> Quote only — same math, not a live delivery</label>
-            <p class="muted" style="margin:6px 0 0">Quotes and voids stay off the live board. Extra site minutes, extra wait minutes, and forklift fee default to 0.</p>
-            <label>Driver / yard notes</label>
-            <textarea id="f-notes" placeholder="Gate code, dump spot, call 10 minutes out, stay off new asphalt…"></textarea>
+            <p class="muted" style="margin:6px 0 0">Quotes and voids stay off the live board. Billing is one load. Forklift fee defaults to 0. Fuel surcharge comes from Settings.</p>
+            <label>Notes</label>
+            <textarea id="f-notes" placeholder="Gate code, driver, PO, dump spot, call 10 minutes out…"></textarea>
 
             <h3 style="margin-top:18px">Materials</h3>
             <div id="book-tabs" class="book-tabs">
@@ -257,6 +247,17 @@
             <input id="s-unload" type="number" />
             <label>Oregon tax rate (0 = off)</label>
             <input id="s-tax" type="number" step="0.001" min="0" />
+            <h3 style="margin-top:18px">Fuel surcharge</h3>
+            <p class="muted">West Coast PADD 5 on-highway diesel, all types, dollars per gallon. EIA weekly Monday survey. The percent applies to the delivery fee only. Materials are not surcharged. Change the baseline here if the percent needs to move.</p>
+            <div class="row-3">
+              <div><label>Diesel this week $/gal</label><input id="s-diesel" type="number" min="0" step="0.001" /></div>
+              <div><label>Baseline $/gal</label><input id="s-diesel-base" type="number" min="0" step="0.01" /></div>
+              <div><label>Week of</label><input id="s-diesel-week" type="date" /></div>
+            </div>
+            <p class="muted" id="s-diesel-next"></p>
+            <div class="btn-row">
+              <button class="ghost" id="pull-eia" type="button">Pull EIA week</button>
+            </div>
             <label>Crew PIN</label>
             <input id="s-pin" type="text" maxlength="8" />
             <label>Admin password (Settings)</label>

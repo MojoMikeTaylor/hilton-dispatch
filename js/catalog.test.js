@@ -56,6 +56,52 @@ assert(reloaded.find((m) => m.id === "topsoil").price === 25, "reload restores p
 assert(reloaded.find((m) => m.id === "sku-custom").price === 12, "reload keeps custom rows");
 assert(reloaded.find((m) => m.id === "q-jaw-run").price === 12.5, "reload restores Willow Creek sheet prices");
 
+const retired = ["red-cinder", "round-drain", "crushed-clean-river", "clean-granite", "blue-ridge-yd", "ivans-gold"];
+retired.forEach((id) => assert(!D.materials.some((m) => m.id === id), "combined row " + id + " is gone from the book"));
+function row(name) { return store.find((m) => m.name === name); }
+assert(row("Red Cinder 1 1/2\"").price === 40 && row("Red Cinder 1 1/2\"").unit === "yd", "Red Cinder 1 1/2 is $40/yd");
+assert(row("Red Cinder 3/8\" minus").price === 40, "Red Cinder 3/8 minus is $40/yd");
+assert(row("3/4\" Round drain").price === 36, "3/4 Round drain is $36/yd");
+assert(row("1 1/2\" Drain").price === 36, "1 1/2 Drain is $36/yd");
+assert(row("Crushed Clean River 3/4\"x1/2\"").price === 48, "Crushed Clean River 3/4x1/2 is $48/yd");
+assert(row("Crushed Clean River 1/4\"x1/2\"").price === 48, "Crushed Clean River 1/4x1/2 is $48/yd");
+assert(row("Clean Granite 1 1/2\"").price === 45, "Clean Granite 1 1/2 is $45/yd");
+assert(row("Clean Granite 3/4\"").price === 45, "Clean Granite 3/4 is $45/yd");
+assert(store.find((m) => m.id === "clean-granite-38").price === 65, "3/8 Clean Granite stays $65");
+assert(row("Blue Ridge 1 1/2\"").price === 50 && row("Blue Ridge 1 1/2\"").unit === "yd", "Blue Ridge 1 1/2 is $50/yd");
+assert(row("Blue Ridge 3/4\"").price === 50, "Blue Ridge 3/4 is $50/yd");
+assert(row("Blue Ridge 3/4\" minus").price === 50, "Blue Ridge 3/4 minus is $50/yd");
+assert(row("Ivans Gold 3/4\"").price === 0.18 && row("Ivans Gold 3/4\"").unit === "lb", "Ivans Gold 3/4 is $0.18/lb");
+assert(row("Ivans Gold 1 1/2\"").price === 0.18, "Ivans Gold 1 1/2 is $0.18/lb");
+assert(store.find((m) => m.id === "black-cinder").price === 78, "Black Cinder stays");
+assert(store.find((m) => m.id === "boulder-blue-ridge").price === 0.18, "Blue Ridge boulders stay on the store book");
+assert(!D.materials.some((m) => /baja|wall block|fabric|tie/i.test(m.name)), "no unpriced Baja, wall block, fabric, or ties");
+
+const splitFromEdited = C.mergeMissing([
+  { id: "red-cinder", name: "Red Cinder (1 1/2\" or 3/8\" minus)", category: "Rock / yard", unit: "yd", price: 42, book: "store" },
+  { id: "topsoil", name: "Topsoil", category: "Soils", unit: "yd", price: 99, book: "store" },
+  { id: "q-jaw-run", name: "Jaw Run", category: "Willow Creek quarry", unit: "ton", price: 12.5, book: "willow", source: "quarry" },
+  { id: "sku-custom", name: "Custom mix", category: "Custom", unit: "yd", price: 12, book: "store" },
+]);
+assert(!splitFromEdited.some((m) => m.id === "red-cinder"), "edited combined Red Cinder row is replaced");
+assert(splitFromEdited.find((m) => m.id === "red-cinder-112").price === 42, "split keeps the existing Red Cinder price");
+assert(splitFromEdited.find((m) => m.id === "red-cinder-38-minus").price === 42, "both Red Cinder sizes keep that price");
+assert(splitFromEdited.filter((m) => m.id === "red-cinder-112").length === 1, "Red Cinder 1 1/2 is not duplicated");
+assert(splitFromEdited.find((m) => m.id === "topsoil").price === 99, "other punched prices stay");
+assert(splitFromEdited.find((m) => m.id === "sku-custom").price === 12, "custom rows stay");
+assert(C.bookOf(splitFromEdited.find((m) => m.id === "q-jaw-run")) === "willow", "Willow Creek stays isolated");
+const splitAgain = C.mergeMissing(splitFromEdited);
+assert(splitAgain.filter((m) => m.id === "red-cinder-112").length === 1, "splitting twice does not duplicate");
+assert(splitAgain.find((m) => m.id === "red-cinder-112").price === 42, "a second merge keeps the split price");
+
+const dropped = C.reloadRetailKeepExtras([
+  { id: "red-cinder", name: "Red Cinder (1 1/2\" or 3/8\" minus)", category: "Rock / yard", unit: "yd", price: 42, book: "store" },
+  { id: "sku-custom", name: "Custom mix", category: "Custom", unit: "yd", price: 12, book: "store" },
+]);
+assert(!dropped.some((m) => m.id === "red-cinder"), "reload does not bring the combined row back");
+assert(dropped.find((m) => m.id === "red-cinder-112").price === 40, "reload uses the published split price");
+assert(dropped.find((m) => m.id === "sku-custom").price === 12, "reload still keeps custom rows");
+
 if (process.exitCode) {
   console.error("Catalog tests failed.");
 } else {

@@ -97,6 +97,42 @@ function serveStatic(req, res, urlPath) {
   });
 }
 
+function latestFredObservation(csv) {
+  let last = null;
+  String(csv || "").split(/\r?\n/).forEach((line) => {
+    const parts = line.trim().replace(/^\uFEFF/, "").split(",");
+    if (parts.length < 2) return;
+    const weekOf = parts[0].trim();
+    const raw = parts[1].trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekOf)) return;
+    if (!/^\d+(\.\d+)?$/.test(raw)) return;
+    last = { weekOf, dieselPrice: Number(raw) };
+  });
+  return last;
+}
+
+function fetchText(url, ms) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms || 12000);
+  return fetch(url, {
+    signal: ctrl.signal,
+    headers: {
+      "User-Agent": "HiltonDispatch/1.0 (yard fuel surcharge)",
+      "Accept": "text/csv,text/plain,*/*",
+    },
+  }).then(async (res) => {
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.text();
+  }).finally(() => clearTimeout(timer));
+}
+
+async function pullWestCoastDiesel() {
+  const csv = await fetchText("https://fred.stlouisfed.org/graph/fredgraph.csv?id=GASDESWCW", 12000);
+  const obs = latestFredObservation(csv);
+  if (!obs || !(obs.dieselPrice > 0)) throw new Error("no price");
+  return obs;
+}
+
 function readBody(req, limit) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -132,6 +168,21 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 200, []);
       }
     });
+    return;
+  }
+
+  if (url.split("?")[0] === "/api/eia-diesel" && method === "GET") {
+    try {
+      const obs = await pullWestCoastDiesel();
+      sendJson(res, 200, {
+        ok: true,
+        dieselPrice: obs.dieselPrice,
+        weekOf: obs.weekOf,
+        source: "EIA via FRED GASDESWCW",
+      });
+    } catch (e) {
+      sendJson(res, 200, { ok: false, error: "EIA did not answer" });
+    }
     return;
   }
 

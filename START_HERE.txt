@@ -11,10 +11,11 @@ HILTON DISPATCH — open this on a yard computer
    Boulders / colored rock = boulder flyer
    Willow Creek = pit tons only. Selecting Willow Creek as origin opens this tab.
 
-4. Ticket extras default to 0:
-   Extra site minutes
-   Extra wait minutes
-   Forklift / extra equipment $
+4. Billing is always 1 load. Extra site minutes and extra wait minutes are 0.
+   Forklift / extra equipment $ defaults to 0.
+   Put a driver or PO in Notes if the crew needs it.
+   Fuel surcharge is Settings-only: diesel this week, baseline (default $4.00), Pull EIA week.
+   It is a percent of the delivery fee. Materials are not surcharged.
    Dump 8% road buffer is Settings-only. Crew does not see it on the ticket.
 
 5. Settings (4357) — confirm:

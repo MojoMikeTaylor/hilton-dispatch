@@ -27,12 +27,12 @@
         <div style="text-align:right">
           <div style="font-size:22px;font-weight:700">INVOICE HD-2026-0001</div>
           <div>Aug 30, 2026</div>
-          <div>PO: RV-4418</div>
+          <div>Diesel week of 21 Sep 2026</div>
         </div>
       </div>
       <div class="row">
         <div><strong>Bill To</strong><br>Rogue Valley Landscaping<br>541-555-0142<br>Oak Street driveway</div>
-        <div><strong>Deliver To</strong><br>214 Oak St, Medford, OR 97501<br>Dump truck @ $160/hr · 1 load<br>Driver / unit: Carlos DT-12</div>
+        <div><strong>Deliver To</strong><br>214 Oak St, Medford, OR 97501<br>Dump truck @ $160/hr<br>Deliver on: 2026-08-30 08:00</div>
       </div>
       <h3 style="margin-top:18px">Materials</h3>
       <table>
@@ -45,16 +45,21 @@
       <h3 style="margin-top:18px">Delivery</h3>
       <table>
         <tr><td>Mapped one-way</td><td>18.0 min · 8.4 mi</td></tr>
-        <tr><td>Trip</td><td>Round trip × 1 load = 36.0 min</td></tr>
+        <tr><td>Trip</td><td>Round trip</td></tr>
         <tr><td>Dump-truck time buffer</td><td>Applied × 1.08 → 38.9 min</td></tr>
         <tr><td>Load + unload</td><td>30 min</td></tr>
         <tr><td>Billable time</td><td>1.25 hr @ $160/hr</td></tr>
+        <tr><td>Fuel surcharge</td><td>86.4% of delivery · week of 21 Sep 2026 · $7.456/gal</td></tr>
       </table>
       <div class="totals-box">
         Materials $336.00<br>
         Delivery $200.00<br>
-        <strong style="font-size:22px">Total $536.00</strong>
+        Fuel surcharge $172.80 (86.4% of delivery)<br>
+        <strong style="font-size:22px">Total $708.80</strong>
       </div>
+      <div class="recon">surchargePercent = max(0, (dieselThisWeek - baseline) / baseline) = 86.4%
+fuelSurcharge = deliveryFee * surchargePercent = $172.80
+total = delivery + materials + forkliftFee + fuelSurcharge = $708.80</div>
     </section>
     <section class="sheet">
       <div class="sheet-head">
@@ -83,8 +88,8 @@
           <tr><td>Fresh Fines Bark</td><td>4 yd</td></tr>
         </tbody>
       </table>
-      <p><strong>Notes for driver:</strong> Dump at the end of the drive. Call 10 minutes out. Stay off new asphalt.</p>
-      <p><strong>Route:</strong> 8.4 miles one-way. Dump truck — 8% time buffer already on the ticket. Driver: Carlos · Unit DT-12</p>
+      <p><strong>Notes:</strong> Dump at the end of the drive. Call 10 minutes out. Stay off new asphalt.</p>
+      <p><strong>Route:</strong> 8.4 miles one-way. Dump truck — 8% time buffer already on the ticket.</p>
       <div class="sig">
         <div><div class="line">Driver signature / time out</div></div>
         <div><div class="line">Customer received by / time in</div></div>
