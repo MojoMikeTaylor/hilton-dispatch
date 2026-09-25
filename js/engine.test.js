@@ -181,6 +181,32 @@ const zeroBase = E.quote({
 });
 assert(zeroBase.surchargePercent === 0 && zeroBase.fuelSurcharge === 0, "a zero baseline does not divide");
 
+const withTote = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "dump",
+  billing: fuelBilling,
+  materials: [{ name: "Topsoil", qty: 8, unit: "yd", price: 38 }],
+  forkliftFee: 75,
+  toteFee: 40,
+});
+assert(Math.abs(withTote.deliveryFee - fueled.deliveryFee) < 0.01, "tote fee does not change the hourly delivery fee");
+assert(Math.abs(withTote.billableHours - fueled.billableHours) < 0.001, "tote fee does not change billable hours");
+assert(Math.abs(withTote.fuelSurcharge - fueled.fuelSurcharge) < 0.01, "tote fee is not fuel-surcharged");
+assert(Math.abs(withTote.toteFee - 40) < 0.01, "tote fee is the typed amount");
+assert(Math.abs(withTote.total - (fueled.total + 40)) < 0.01, "tote fee is added on top of delivery, materials, fuel, and forklift");
+assert(withTote.formula.indexOf("Tote / bagging fee: $40.00") >= 0, "invoice names the tote fee when it is more than zero");
+assert(withTote.formula.indexOf("total = delivery + materials + fuelSurcharge + forkliftFee + toteFee") >= 0, "invoice total formula includes the tote fee");
+assert(fueled.formula.toLowerCase().indexOf("tote") < 0, "a blank tote fee stays off the formula");
+
+const blankTote = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "dump",
+  billing,
+  materials: [],
+  toteFee: "",
+});
+assert(blankTote.toteFee === 0, "an empty tote fee is $0");
+
 if (process.exitCode) {
   console.error("Engine tests failed.");
 } else {

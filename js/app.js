@@ -60,6 +60,7 @@ function blankDraft() {
     extraSiteMinutes: 0,
     extraWaitMinutes: 0,
     forkliftFee: 0,
+    toteFee: 0,
     rateOverride: null,
     adminRate: false,
     deliverOn: when.toISOString().slice(0, 16),
@@ -742,6 +743,8 @@ function renderForm() {
   $("f-address").value = d.address;
   $("f-notes").value = d.notes;
   lockTicketMath(d);
+  const tote = Number(d.toteFee) || 0;
+  $("f-tote-fee").value = tote > 0 ? tote : "";
   $("f-forklift-fee").value = d.forkliftFee || 0;
   $("f-status").value = normalizeStatus(d.status);
   if ($("f-quote")) $("f-quote").checked = isQuoteStatus(d.status);
@@ -839,6 +842,7 @@ function currentQuote() {
     billing: ticketBilling(),
     materials: state.draft.materials,
     forkliftFee: state.draft.forkliftFee,
+    toteFee: state.draft.toteFee,
   });
   if (isQuarryYard(state.draft.yardId)) {
     q.quarryDirect = true;
@@ -852,13 +856,14 @@ function renderQuoteBox() {
   state.quote = q;
   const routed = !!state.route;
   const feeBit = q.forkliftFee ? ` · ${HDEngine.money(q.forkliftFee)} forklift fee` : "";
+  const toteBit = q.toteFee ? ` · ${HDEngine.money(q.toteFee)} tote / bagging` : "";
   const week = HDEngine.weekLabel(q.dieselWeekOf) || "—";
   const fuelBit = `${HDEngine.money(q.fuelSurcharge)} fuel surcharge (${HDEngine.percentText(q.surchargePercent)} of delivery · week of ${week})`;
   const quarryBit = q.quarryDirect ? `<div style="margin-top:8px;color:#f3d7b5">Quarry direct — truckload</div>` : "";
   $("quote-box").innerHTML = `
     <div class="l muted" style="color:#d9c4a8">Delivery + materials + fuel</div>
     <div class="total">${HDEngine.money(q.total)}</div>
-    <div style="margin-top:8px">${HDEngine.money(q.deliveryFee)} delivery · ${HDEngine.money(q.materialsTotal)} materials${feeBit} · ${fuelBit}</div>
+    <div style="margin-top:8px">${HDEngine.money(q.deliveryFee)} delivery · ${HDEngine.money(q.materialsTotal)} materials${feeBit}${toteBit} · ${fuelBit}</div>
     ${quarryBit}
     <div class="break">${routed ? q.formula : "Punch the delivery address and hit Calculate route to lock time and delivery fee.\nMaterials and the forklift fee update the total as you type. Fuel surcharge uses the diesel price in Settings.\nWeek of " + week + "."}</div>
     ${state.route ? `<div style="margin-top:10px;font-size:13px">Mapped ${state.route.miles.toFixed(1)} mi one-way via ${state.route.provider === "google" ? "Google" : "OSM / OSRM"}</div>` : ""}
@@ -940,6 +945,7 @@ function collectForm() {
   state.draft.truck = selectedTruck();
   lockTicketMath(state.draft);
   state.draft.forkliftFee = Math.max(0, Number($("f-forklift-fee").value) || 0);
+  state.draft.toteFee = Math.max(0, Number($("f-tote-fee").value) || 0);
   if ($("f-quote") && $("f-quote").checked) state.draft.status = "quote";
   else {
     const st = normalizeStatus($("f-status").value);
@@ -1012,6 +1018,7 @@ function openTicket(id) {
   state.draft = JSON.parse(JSON.stringify(job));
   if (!Array.isArray(state.draft.materials)) state.draft.materials = [];
   if (state.draft.forkliftFee == null) state.draft.forkliftFee = 0;
+  if (state.draft.toteFee == null) state.draft.toteFee = 0;
   lockTicketMath(state.draft);
   state.draft.status = normalizeStatus(state.draft.status);
   state.route = job.route || null;
@@ -1281,6 +1288,9 @@ function buildPrint(ticket) {
   const feeRow = q.forkliftFee
     ? `<tr><td>Forklift / extra fee</td><td>${HDEngine.money(q.forkliftFee)}</td></tr>`
     : "";
+  const toteRow = q.toteFee
+    ? `<tr><td>Tote / bagging fee</td><td>${HDEngine.money(q.toteFee)}</td></tr>`
+    : "";
   const truckLine = `${truckName(ticket.truck)} @ ${HDEngine.money(q.rate)}/hr`;
   const weekLabel = HDEngine.weekLabel(q.dieselWeekOf) || "—";
   const fuelRow = `<tr><td>Fuel surcharge</td><td>${HDEngine.percentText(q.surchargePercent)} of delivery · week of ${esc(weekLabel)} · ${HDEngine.dollarsPerGal(q.dieselPrice, 3)}/gal</td></tr>`;
@@ -1326,12 +1336,14 @@ function buildPrint(ticket) {
         <tr><td>Trip</td><td>${q.tripFactor === 2 ? "Round trip" : "One way"}</td></tr>
         <tr><td>Billable time</td><td>${q.billableHours.toFixed(2)} hr @ ${HDEngine.money(q.rate)}/hr</td></tr>
         ${feeRow}
+        ${toteRow}
         ${fuelRow}
       </table>
       <div class="totals-box">
         Materials ${HDEngine.money(q.materialsTotal)}<br>
         Delivery ${HDEngine.money(q.deliveryFee)}<br>
         ${q.forkliftFee ? "Forklift / extra equipment " + HDEngine.money(q.forkliftFee) + "<br>" : ""}
+        ${q.toteFee ? "Tote / bagging fee " + HDEngine.money(q.toteFee) + "<br>" : ""}
         Fuel surcharge ${HDEngine.money(q.fuelSurcharge)} (${HDEngine.percentText(q.surchargePercent)} of delivery)<br>
         ${q.tax ? "Tax " + HDEngine.money(q.tax) + "<br>" : ""}
         <strong style="font-size:22px">Total ${HDEngine.money(q.total)}</strong>
@@ -1369,7 +1381,7 @@ function buildPrint(ticket) {
          ${q.forkliftFee ? " Forklift / extra fee " + HDEngine.money(q.forkliftFee) + "." : ""}</p>
       <p><strong>Route:</strong> ${(ticket.route ? ticket.route.miles.toFixed(1) : "—")} miles one-way from ${esc(yard.address)}.</p>
       ${steps ? `<ol>${steps}</ol>` : `<p class="muted">Turn-by-turn prints when the OSM router is used. Google Distance Matrix still bills time/miles.</p>`}
-      <div class="recon">${esc(q.formula || "")}</div>
+      <div class="recon">${esc(String(q.formula || "").split("\n").filter((line) => !/tote/i.test(line)).join("\n"))}</div>
       <div class="sig">
         <div><div class="line">Driver signature / time out</div></div>
         <div><div class="line">Customer received by / time in</div></div>
@@ -1403,6 +1415,7 @@ function emailAccounting(ticket) {
     `Truck: ${truckName(ticket.truck)} @ ${HDEngine.money(q.rate)}/hr`,
     `Mapped one-way: ${(q.oneWayMin || 0).toFixed(1)} min`,
     q.forkliftFee ? `Forklift / extra equipment fee: ${HDEngine.money(q.forkliftFee)}` : `Forklift / extra equipment fee: $0.00`,
+    q.toteFee ? `Tote / bagging fee: ${HDEngine.money(q.toteFee)}` : null,
     `Diesel week of ${HDEngine.weekLabel(q.dieselWeekOf) || "—"}`,
     ``,
     q.formula,
@@ -1425,13 +1438,13 @@ function emailAccounting(ticket) {
 }
 
 function exportCsv() {
-  const rows = [["ticket", "date", "customer", "phone", "address", "yard", "truck", "hours", "delivery", "materials", "forklift_fee", "fuel_surcharge", "total", "status"]];
+  const rows = [["ticket", "date", "customer", "phone", "address", "yard", "truck", "hours", "delivery", "materials", "forklift_fee", "tote_fee", "fuel_surcharge", "total", "status"]];
   db.jobs.forEach((j) => {
     const y = yardById(j.yardId);
     rows.push([
       j.id, j.createdAt, j.customer, j.phone, j.address, y && y.name, j.truck,
       j.quote && j.quote.billableHours, j.quote && j.quote.deliveryFee, j.quote && j.quote.materialsTotal,
-      j.quote && j.quote.forkliftFee, j.quote && j.quote.fuelSurcharge, j.quote && j.quote.total, j.status
+      j.quote && j.quote.forkliftFee, j.quote && j.quote.toteFee, j.quote && j.quote.fuelSurcharge, j.quote && j.quote.total, j.status
     ]);
   });
   const csv = rows.map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -1472,6 +1485,7 @@ function seedPreview() {
     loads: 1,
     extraMinutes: 0,
     forkliftFee: 0,
+    toteFee: 0,
   });
   db.jobs.push({
     id: "HD-2026-0001",
@@ -1491,6 +1505,7 @@ function seedPreview() {
     extraSiteMinutes: 0,
     extraWaitMinutes: 0,
     forkliftFee: 0,
+    toteFee: 0,
     materials,
     quote,
     route: { provider: "osrm", seconds: 18 * 60, miles: 8.4, from: { lat: 42.3916, lng: -122.9124 }, to: { lat: 42.3266, lng: -122.8756 } },
@@ -1555,6 +1570,7 @@ async function onReady() {
     ["input", "change", "keyup"].forEach((ev) => el.addEventListener(ev, apply));
   }
   liveField("f-forklift-fee", () => { state.draft.forkliftFee = Math.max(0, Number($("f-forklift-fee").value) || 0); renderQuoteBox(); });
+  liveField("f-tote-fee", () => { state.draft.toteFee = Math.max(0, Number($("f-tote-fee").value) || 0); renderQuoteBox(); });
   liveField("f-rate", () => { state.draft.rateOverride = Number($("f-rate").value); renderQuoteBox(); });
   $("f-admin-rate").addEventListener("change", () => {
     state.draft.adminRate = $("f-admin-rate").checked;
@@ -1717,6 +1733,7 @@ async function onReady() {
       if (!job) return;
       state.draft = { ...JSON.parse(JSON.stringify(job)), id: null, createdAt: null, status: "new" };
       if (state.draft.forkliftFee == null) state.draft.forkliftFee = 0;
+      if (state.draft.toteFee == null) state.draft.toteFee = 0;
       lockTicketMath(state.draft);
       state.route = job.route || null;
       state.quote = job.quote || null;

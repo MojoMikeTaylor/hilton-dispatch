@@ -13,11 +13,12 @@
    7. Delivery fee                          = billableHours * ($160 dump | $100 small | $160 forklift)
    8. Materials                             = Σ qty * unitPrice
    9. Forklift / extra fee                  = ticket dollars (default 0)
-  10. surchargePercent                      = max(0, (dieselThisWeek - baseline) / baseline)
-  11. fuelSurcharge                         = deliveryFee * surchargePercent
-  12. Tax                                   = (delivery + materials + forkliftFee + fuelSurcharge) * taxRate
+  10. Tote / bagging fee                    = ticket dollars typed by hand (default 0)
+  11. surchargePercent                      = max(0, (dieselThisWeek - baseline) / baseline)
+  12. fuelSurcharge                         = deliveryFee * surchargePercent
+  13. Tax                                   = (delivery + materials + fuelSurcharge + forkliftFee + toteFee) * taxRate
                                               (OR default 0)
-  13. total                                 = delivery + materials + forkliftFee + fuelSurcharge + tax
+  14. total                                 = delivery + materials + fuelSurcharge + forkliftFee + toteFee + tax
 */
 
 window.HDEngine = {
@@ -95,6 +96,7 @@ window.HDEngine = {
     billing,
     materials,
     forkliftFee,
+    toteFee,
   }) {
     const b = billing || {};
     const loadCount = 1;
@@ -102,6 +104,7 @@ window.HDEngine = {
     const extraWait = 0;
     const extra = 0;
     const fee = Math.max(0, Number(forkliftFee) || 0);
+    const tote = Math.max(0, Number(toteFee) || 0);
     const oneWayMin = Math.max(0, (Number(oneWaySeconds) || 0) / 60);
     const tripFactor = (b.tripMode || "roundtrip") === "oneway" ? 1 : 2;
     const tripMin = oneWayMin * tripFactor * loadCount;
@@ -132,7 +135,7 @@ window.HDEngine = {
     });
     const materialsTotal = Number(lines.reduce((s, l) => s + l.amount, 0).toFixed(2));
     const fuel = this.fuelFrom(b, deliveryFee);
-    const subtotal = Number((deliveryFee + materialsTotal + fee + fuel.fuelSurcharge).toFixed(2));
+    const subtotal = Number((deliveryFee + materialsTotal + fee + fuel.fuelSurcharge + tote).toFixed(2));
     const taxRate = Number(b.taxRate) || 0;
     const tax = Number((subtotal * taxRate).toFixed(2));
     const total = Number((subtotal + tax).toFixed(2));
@@ -145,6 +148,7 @@ window.HDEngine = {
       extraSite,
       extraWait,
       forkliftFee: fee,
+      toteFee: tote,
       dieselPrice: fuel.dieselPrice,
       dieselBaseline: fuel.dieselBaseline,
       dieselWeekOf: fuel.dieselWeekOf,
@@ -171,7 +175,7 @@ window.HDEngine = {
       formula: this.describe({
         oneWayMin, tripFactor, loadCount, extra, extraSite, extraWait, tripMin, isDump, isForklift, multiplier,
         adjustedDriveMin, siteMin, rawHours, billableHours, rate, deliveryFee,
-        materialsTotal, forkliftFee: fee, fuelSurcharge: fuel.fuelSurcharge,
+        materialsTotal, forkliftFee: fee, toteFee: tote, fuelSurcharge: fuel.fuelSurcharge,
         surchargePercent: fuel.surchargePercent, dieselPrice: fuel.dieselPrice,
         dieselBaseline: fuel.dieselBaseline, dieselWeekOf: fuel.dieselWeekOf,
         tax, total, billing: b,
@@ -187,7 +191,10 @@ window.HDEngine = {
         ? " (no dump buffer — forklift truck)"
         : " (no buffer — small truck)";
     const week = this.weekLabel(q.dieselWeekOf) || "—";
-    const preTax = (Number(q.deliveryFee) || 0) + (Number(q.materialsTotal) || 0) + (Number(q.forkliftFee) || 0) + (Number(q.fuelSurcharge) || 0);
+    const preTax = (Number(q.deliveryFee) || 0) + (Number(q.materialsTotal) || 0) + (Number(q.fuelSurcharge) || 0) + (Number(q.forkliftFee) || 0) + (Number(q.toteFee) || 0);
+    const totalLine = q.toteFee
+      ? `total = delivery + materials + fuelSurcharge + forkliftFee + toteFee = ${this.money(preTax)}`
+      : `total = delivery + materials + forkliftFee + fuelSurcharge = ${this.money(preTax)}`;
     return [
       `Mapped one-way drive: ${q.oneWayMin.toFixed(1)} min`,
       `Trip mode: ${tripLabel} → ${q.tripMin.toFixed(1)} min road time`,
@@ -198,10 +205,11 @@ window.HDEngine = {
       `Delivery fee: ${this.money(q.deliveryFee)}`,
       `Materials: ${this.money(q.materialsTotal)}`,
       q.forkliftFee ? `Forklift / extra fee: ${this.money(q.forkliftFee)}` : `Forklift / extra fee: ${this.money(0)}`,
+      q.toteFee ? `Tote / bagging fee: ${this.money(q.toteFee)}` : null,
       `EIA week of ${week} · West Coast PADD 5 on-highway diesel, all types · ${this.dollarsPerGal(q.dieselPrice, 3)}/gal · baseline ${this.dollarsPerGal(q.dieselBaseline, 2)}/gal`,
       `surchargePercent = max(0, (dieselThisWeek - baseline) / baseline) = ${this.percentText(q.surchargePercent)}`,
       `fuelSurcharge = deliveryFee * surchargePercent = ${this.money(q.fuelSurcharge)}`,
-      `total = delivery + materials + forkliftFee + fuelSurcharge = ${this.money(preTax)}`,
+      totalLine,
       q.tax ? `Tax: ${this.money(q.tax)}` : null,
       `TOTAL: ${this.money(q.total)}`,
     ].filter(Boolean).join("\n");
