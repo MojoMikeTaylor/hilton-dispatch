@@ -250,11 +250,15 @@
             <label>Oregon tax rate (0 = off)</label>
             <input id="s-tax" type="number" step="0.001" min="0" />
             <h3 style="margin-top:18px">Fuel surcharge</h3>
-            <p class="muted">West Coast PADD 5 on-highway diesel, all types, dollars per gallon. EIA weekly Monday survey. The percent applies to the delivery fee only. Materials are not surcharged. Change the baseline here if the percent needs to move.</p>
+            <p class="muted">Type the percent for this week. It applies to the delivery fee only. Materials, the forklift fee, and the tote fee are not surcharged. Diesel price and week-of print on the invoice as the EIA West Coast index. Pull EIA week updates those two and leaves the percent alone.</p>
             <div class="row-3">
+              <div><label>Fuel surcharge %</label><input id="s-fuel-pct" type="number" min="0" step="0.1" /></div>
               <div><label>Diesel this week $/gal</label><input id="s-diesel" type="number" min="0" step="0.001" /></div>
-              <div><label>Baseline $/gal</label><input id="s-diesel-base" type="number" min="0" step="0.01" /></div>
               <div><label>Week of</label><input id="s-diesel-week" type="date" /></div>
+            </div>
+            <div class="hidden">
+              <label>Baseline $/gal</label>
+              <input id="s-diesel-base" type="number" min="0" step="0.01" />
             </div>
             <p class="muted" id="s-diesel-next"></p>
             <div class="btn-row">

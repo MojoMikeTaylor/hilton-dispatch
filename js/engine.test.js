@@ -135,10 +135,15 @@ assert(splitMins.extraWait === 0, "extra wait minutes stay 0");
 
 const fuelBilling = {
   ...billing,
+  surchargePercent: 15,
   dieselPrice: 7.456,
   dieselBaseline: 4,
   dieselWeekOf: "2026-09-21",
 };
+const at150 = E.fuelFrom({ surchargePercent: 15, dieselPrice: 7.456, dieselBaseline: 4, dieselWeekOf: "2026-09-21" }, 150);
+assert(Math.abs(at150.fuelSurcharge - 22.5) < 0.001, "$150 delivery at 15% is $22.50");
+assert(Math.abs(E.fuelFrom({ surchargePercent: 10, dieselBaseline: 99 }, 150).fuelSurcharge - 15) < 0.001, "$150 delivery at 10% is $15.00");
+assert(E.fuelFrom({ surchargePercent: 0, dieselPrice: 7.456, dieselBaseline: 4 }, 150).fuelSurcharge === 0, "0% fuel surcharge is $0");
 const fueled = E.quote({
   oneWaySeconds: 30 * 60,
   truck: "dump",
@@ -150,36 +155,27 @@ const fueled = E.quote({
   extraMinutes: 30,
   forkliftFee: 75,
 });
-const pct = Math.max(0, (Math.round(7.456 * 1000) - Math.round(4 * 1000)) / Math.round(4 * 1000));
-assert(Math.abs(pct - 0.864) < 1e-12, "example ratio is 86.4% of the delivery fee");
-assert(Math.abs(fueled.surchargePercent - pct) < 1e-12, "surcharge percent is computed from diesel and baseline");
+assert(fueled.surchargePercent === 15, "surcharge percent is the typed percent");
 assert(fueled.loadCount === 1 && fueled.extra === 0, "loads and extra minutes do not enter the fuel ticket");
 assert(Math.abs(fueled.deliveryFee - 280) < 0.01, "delivery fee is the surcharge base");
 assert(Math.abs(fueled.materialsTotal - 304) < 0.01, "materials are not surcharged");
-assert(Math.abs(fueled.fuelSurcharge - Number((280 * pct).toFixed(2))) < 0.001, "fuel surcharge is delivery fee times the percent");
-assert(Math.abs(fueled.total - (280 + 304 + 75 + fueled.fuelSurcharge)) < 0.01, "total adds delivery, materials, forklift, and fuel");
-assert(fueled.formula.indexOf("surchargePercent = max(0, (dieselThisWeek - baseline) / baseline)") >= 0, "invoice prints the percent formula");
-assert(fueled.formula.indexOf("fuelSurcharge = deliveryFee * surchargePercent") >= 0, "invoice prints the fuel formula");
+assert(Math.abs(fueled.fuelSurcharge - 42) < 0.001, "15% of the $280 delivery fee is $42.00");
+assert(Math.abs(fueled.total - (280 + 304 + 75 + 42)) < 0.01, "total adds delivery, materials, forklift, and fuel");
+assert(fueled.formula.indexOf("Fuel surcharge: 15% of delivery. EIA West Coast diesel $7.456/gal, week of 21 Sep 2026 (index only).") >= 0, "invoice prints the index sentence");
+assert(fueled.formula.indexOf("dieselThisWeek") < 0 && fueled.formula.indexOf("baseline") < 0, "invoice does not print the baseline formula");
 assert(fueled.formula.indexOf("total = delivery + materials + forkliftFee + fuelSurcharge") >= 0, "invoice prints the total formula");
-assert(fueled.formula.indexOf("21 Sep 2026") >= 0, "invoice prints the EIA week");
-assert(fueled.formula.indexOf(E.percentText(pct)) >= 0, "printed percent is the computed percent");
 assert(code.indexOf("86.4") < 0 && code.indexOf("0.864") < 0, "surcharge percent is not hardcoded");
 
-const cheap = E.quote({
+const ignoredIndex = E.quote({
   oneWaySeconds: 30 * 60,
-  truck: "small",
-  billing: { ...fuelBilling, dieselPrice: 3.5 },
-  materials: [],
+  truck: "dump",
+  billing: { ...fuelBilling, dieselPrice: 3.5, dieselBaseline: 0 },
+  materials: [{ name: "Topsoil", qty: 8, unit: "yd", price: 38 }],
+  forkliftFee: 75,
 });
-assert(cheap.surchargePercent === 0 && cheap.fuelSurcharge === 0, "diesel under the baseline adds no surcharge");
-
-const zeroBase = E.quote({
-  oneWaySeconds: 30 * 60,
-  truck: "small",
-  billing: { ...fuelBilling, dieselBaseline: 0 },
-  materials: [],
-});
-assert(zeroBase.surchargePercent === 0 && zeroBase.fuelSurcharge === 0, "a zero baseline does not divide");
+assert(ignoredIndex.surchargePercent === 15, "diesel price and baseline do not change the typed percent");
+assert(Math.abs(ignoredIndex.fuelSurcharge - fueled.fuelSurcharge) < 0.001, "diesel price does not change the fuel dollars");
+assert(Math.abs(ignoredIndex.deliveryFee - fueled.deliveryFee) < 0.01, "diesel price does not change hourly delivery");
 
 const withTote = E.quote({
   oneWaySeconds: 30 * 60,
@@ -195,7 +191,7 @@ assert(Math.abs(withTote.fuelSurcharge - fueled.fuelSurcharge) < 0.01, "tote fee
 assert(Math.abs(withTote.toteFee - 40) < 0.01, "tote fee is the typed amount");
 assert(Math.abs(withTote.total - (fueled.total + 40)) < 0.01, "tote fee is added on top of delivery, materials, fuel, and forklift");
 assert(withTote.formula.indexOf("Tote / bagging fee: $40.00") >= 0, "invoice names the tote fee when it is more than zero");
-assert(withTote.formula.indexOf("total = delivery + materials + fuelSurcharge + forkliftFee + toteFee") >= 0, "invoice total formula includes the tote fee");
+assert(withTote.formula.indexOf("total = delivery + materials + forkliftFee + toteFee + fuelSurcharge") >= 0, "invoice total formula includes the tote fee");
 assert(fueled.formula.toLowerCase().indexOf("tote") < 0, "a blank tote fee stays off the formula");
 
 const blankTote = E.quote({

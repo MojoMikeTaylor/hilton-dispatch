@@ -9,7 +9,7 @@ Crew takes the call, punches the delivery address, picks the loading yard, maps 
 1. Customer calls. Hit **New ticket**.
 2. Name, phone, delivery address, which yard is loading the truck.
 3. Dump truck ($160/hr) or small truck ($100/hr). Forklift truck is optional for palletized stone. The dump-road buffer stays in Settings.
-4. Billing is always **1 load**. Extra site minutes and extra wait minutes are **0**. Forklift / extra equipment $ defaults to **0**. A driver or PO goes in Notes. Fuel surcharge is a percent of the delivery fee from Settings (West Coast PADD 5 diesel vs the baseline).
+4. Billing is always **1 load**. Extra site minutes and extra wait minutes are **0**. Forklift / extra equipment $ defaults to **0**. A driver or PO goes in Notes. Fuel surcharge is the percent typed in Settings, applied to the delivery fee only. Diesel price and week-of print as the EIA index.
 5. Search the **active material tab** (Store, Flagstone, Boulders / colored rock, Willow Creek). Choosing Willow Creek as origin defaults the picker to the Willow Creek tab. Crew can switch tabs on purpose.
 6. **Calculate route** — map draws, delivery fee locks, status becomes Routed.
 7. **Print invoice + route sheet** — page 1 full math for accounting, page 2 driver sheet.
@@ -29,8 +29,8 @@ Printed on every invoice.
 7. Delivery fee = billable hours × $160 dump / $100 small / $160 forklift (or admin rates).
 8. Materials = qty × book price. Materials are not fuel-surcharged.
 9. Forklift / extra equipment fee = the dollar amount typed on the ticket.
-10. surchargePercent = max(0, (dieselThisWeek − baseline) / baseline). fuelSurcharge = delivery fee × that percent. Baseline defaults to $4.00/gal. Diesel this week is the EIA West Coast PADD 5 on-highway price (week of 21 Sep 2026 is $7.456).
-11. Total = delivery + materials + forklift fee + fuel surcharge. Oregon tax off unless admin turns it on.
+10. Fuel surcharge = delivery fee × (typed percent / 100). The office types the percent each week. Default is 0. Diesel $/gal and week-of are the EIA West Coast PADD 5 index on the invoice. Pull EIA week updates the price and the date, not the percent.
+11. Total = delivery + materials + forklift fee + tote fee + fuel surcharge. Oregon tax off unless admin turns it on.
 
 Totals update as you type. Save persists the ticket and the book.
 

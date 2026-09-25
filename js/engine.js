@@ -14,11 +14,12 @@
    8. Materials                             = Σ qty * unitPrice
    9. Forklift / extra fee                  = ticket dollars (default 0)
   10. Tote / bagging fee                    = ticket dollars typed by hand (default 0)
-  11. surchargePercent                      = max(0, (dieselThisWeek - baseline) / baseline)
-  12. fuelSurcharge                         = deliveryFee * surchargePercent
-  13. Tax                                   = (delivery + materials + fuelSurcharge + forkliftFee + toteFee) * taxRate
+  11. surchargePercent                      = the percent typed in Settings (15 means 15%). Default 0.
+                                              Diesel price and week-of are printed as the EIA index only.
+  12. fuelSurcharge                         = deliveryFee * (surchargePercent / 100)
+  13. Tax                                   = (delivery + materials + forkliftFee + toteFee + fuelSurcharge) * taxRate
                                               (OR default 0)
-  14. total                                 = delivery + materials + fuelSurcharge + forkliftFee + toteFee + tax
+  14. total                                 = delivery + materials + forkliftFee + toteFee + fuelSurcharge + tax
 */
 
 window.HDEngine = {
@@ -76,18 +77,22 @@ window.HDEngine = {
   fuelFrom(billing, deliveryFee) {
     const b = billing || {};
     const dieselRaw = Number(b.dieselPrice);
-    const baseRaw = Number(b.dieselBaseline);
     const dieselPrice = isFinite(dieselRaw) ? dieselRaw : null;
-    const dieselBaseline = isFinite(baseRaw) ? baseRaw : null;
     const dieselWeekOf = b.dieselWeekOf || "";
-    let surchargePercent = 0;
-    if (dieselPrice != null && dieselBaseline != null && dieselBaseline > 0) {
-      const dieselMilli = Math.round(dieselPrice * 1000);
-      const baseMilli = Math.round(dieselBaseline * 1000);
-      if (baseMilli > 0) surchargePercent = Math.max(0, (dieselMilli - baseMilli) / baseMilli);
-    }
-    const fuelSurcharge = Number(((Number(deliveryFee) || 0) * surchargePercent).toFixed(2));
-    return { dieselPrice, dieselBaseline, dieselWeekOf, surchargePercent, fuelSurcharge };
+    const pctRaw = Number(b.surchargePercent);
+    const surchargePercent = isFinite(pctRaw) && pctRaw > 0 ? pctRaw : 0;
+    const fuelSurcharge = Number(((Number(deliveryFee) || 0) * (surchargePercent / 100)).toFixed(2));
+    return { dieselPrice, dieselWeekOf, surchargePercent, fuelSurcharge };
+  },
+
+  fuelSentence(q) {
+    const pct = Number(q && q.surchargePercent);
+    const n = isFinite(pct) && pct > 0 ? pct : 0;
+    const rounded = Math.round(n * 10) / 10;
+    const shown = Math.abs(rounded - Math.round(rounded)) < 1e-9 ? String(Math.round(rounded)) : rounded.toFixed(1);
+    const week = this.weekLabel(q && q.dieselWeekOf) || "—";
+    const gal = this.dollarsPerGal(q && q.dieselPrice, 3);
+    return `Fuel surcharge: ${shown}% of delivery. EIA West Coast diesel ${gal}/gal, week of ${week} (index only).`;
   },
 
   quote({
@@ -150,7 +155,6 @@ window.HDEngine = {
       forkliftFee: fee,
       toteFee: tote,
       dieselPrice: fuel.dieselPrice,
-      dieselBaseline: fuel.dieselBaseline,
       dieselWeekOf: fuel.dieselWeekOf,
       surchargePercent: fuel.surchargePercent,
       fuelSurcharge: fuel.fuelSurcharge,
@@ -177,7 +181,7 @@ window.HDEngine = {
         adjustedDriveMin, siteMin, rawHours, billableHours, rate, deliveryFee,
         materialsTotal, forkliftFee: fee, toteFee: tote, fuelSurcharge: fuel.fuelSurcharge,
         surchargePercent: fuel.surchargePercent, dieselPrice: fuel.dieselPrice,
-        dieselBaseline: fuel.dieselBaseline, dieselWeekOf: fuel.dieselWeekOf,
+        dieselWeekOf: fuel.dieselWeekOf,
         tax, total, billing: b,
       }),
     };
@@ -190,10 +194,9 @@ window.HDEngine = {
       : q.isForklift
         ? " (no dump buffer — forklift truck)"
         : " (no buffer — small truck)";
-    const week = this.weekLabel(q.dieselWeekOf) || "—";
     const preTax = (Number(q.deliveryFee) || 0) + (Number(q.materialsTotal) || 0) + (Number(q.fuelSurcharge) || 0) + (Number(q.forkliftFee) || 0) + (Number(q.toteFee) || 0);
     const totalLine = q.toteFee
-      ? `total = delivery + materials + fuelSurcharge + forkliftFee + toteFee = ${this.money(preTax)}`
+      ? `total = delivery + materials + forkliftFee + toteFee + fuelSurcharge = ${this.money(preTax)}`
       : `total = delivery + materials + forkliftFee + fuelSurcharge = ${this.money(preTax)}`;
     return [
       `Mapped one-way drive: ${q.oneWayMin.toFixed(1)} min`,
@@ -206,9 +209,7 @@ window.HDEngine = {
       `Materials: ${this.money(q.materialsTotal)}`,
       q.forkliftFee ? `Forklift / extra fee: ${this.money(q.forkliftFee)}` : `Forklift / extra fee: ${this.money(0)}`,
       q.toteFee ? `Tote / bagging fee: ${this.money(q.toteFee)}` : null,
-      `EIA week of ${week} · West Coast PADD 5 on-highway diesel, all types · ${this.dollarsPerGal(q.dieselPrice, 3)}/gal · baseline ${this.dollarsPerGal(q.dieselBaseline, 2)}/gal`,
-      `surchargePercent = max(0, (dieselThisWeek - baseline) / baseline) = ${this.percentText(q.surchargePercent)}`,
-      `fuelSurcharge = deliveryFee * surchargePercent = ${this.money(q.fuelSurcharge)}`,
+      this.fuelSentence(q),
       totalLine,
       q.tax ? `Tax: ${this.money(q.tax)}` : null,
       `TOTAL: ${this.money(q.total)}`,

@@ -857,15 +857,14 @@ function renderQuoteBox() {
   const routed = !!state.route;
   const feeBit = q.forkliftFee ? ` · ${HDEngine.money(q.forkliftFee)} forklift fee` : "";
   const toteBit = q.toteFee ? ` · ${HDEngine.money(q.toteFee)} tote / bagging` : "";
-  const week = HDEngine.weekLabel(q.dieselWeekOf) || "—";
-  const fuelBit = `${HDEngine.money(q.fuelSurcharge)} fuel surcharge (${HDEngine.percentText(q.surchargePercent)} of delivery · week of ${week})`;
+  const fuelBit = `${HDEngine.money(q.fuelSurcharge)} · ${HDEngine.fuelSentence(q)}`;
   const quarryBit = q.quarryDirect ? `<div style="margin-top:8px;color:#f3d7b5">Quarry direct — truckload</div>` : "";
   $("quote-box").innerHTML = `
     <div class="l muted" style="color:#d9c4a8">Delivery + materials + fuel</div>
     <div class="total">${HDEngine.money(q.total)}</div>
     <div style="margin-top:8px">${HDEngine.money(q.deliveryFee)} delivery · ${HDEngine.money(q.materialsTotal)} materials${feeBit}${toteBit} · ${fuelBit}</div>
     ${quarryBit}
-    <div class="break">${routed ? q.formula : "Punch the delivery address and hit Calculate route to lock time and delivery fee.\nMaterials and the forklift fee update the total as you type. Fuel surcharge uses the diesel price in Settings.\nWeek of " + week + "."}</div>
+    <div class="break">${routed ? q.formula : "Punch the delivery address and hit Calculate route to lock time and delivery fee.\nMaterials, the forklift fee, and the tote fee update the total as you type.\n" + HDEngine.fuelSentence(q)}</div>
     ${state.route ? `<div style="margin-top:10px;font-size:13px">Mapped ${state.route.miles.toFixed(1)} mi one-way via ${state.route.provider === "google" ? "Google" : "OSM / OSRM"}</div>` : ""}
   `;
 }
@@ -1136,8 +1135,9 @@ function renderSettings() {
   $("s-load").value = s.billing.loadMinutes;
   $("s-unload").value = s.billing.unloadMinutes;
   $("s-tax").value = s.billing.taxRate || 0;
+  $("s-fuel-pct").value = s.billing.surchargePercent != null ? s.billing.surchargePercent : 0;
   $("s-diesel").value = s.billing.dieselPrice != null ? s.billing.dieselPrice : "";
-  $("s-diesel-base").value = s.billing.dieselBaseline != null ? s.billing.dieselBaseline : "";
+  if ($("s-diesel-base")) $("s-diesel-base").value = s.billing.dieselBaseline != null ? s.billing.dieselBaseline : "";
   $("s-diesel-week").value = String(s.billing.dieselWeekOf || "").slice(0, 10);
   renderDieselNext();
   $("s-pin").value = s.security.pin;
@@ -1177,8 +1177,10 @@ function saveSettings() {
   s.billing.loadMinutes = Number($("s-load").value) || 0;
   s.billing.unloadMinutes = Number($("s-unload").value) || 0;
   s.billing.taxRate = Number($("s-tax").value) || 0;
+  const pctRaw = $("s-fuel-pct").value.trim();
+  s.billing.surchargePercent = pctRaw === "" ? 0 : Math.max(0, Number(pctRaw) || 0);
   const dieselRaw = $("s-diesel").value.trim();
-  const baseRaw = $("s-diesel-base").value.trim();
+  const baseRaw = $("s-diesel-base") ? $("s-diesel-base").value.trim() : "";
   const weekRaw = $("s-diesel-week").value;
   if (dieselRaw !== "" && isFinite(Number(dieselRaw)) && Number(dieselRaw) >= 0) {
     s.billing.dieselPrice = Number(dieselRaw);
@@ -1293,7 +1295,7 @@ function buildPrint(ticket) {
     : "";
   const truckLine = `${truckName(ticket.truck)} @ ${HDEngine.money(q.rate)}/hr`;
   const weekLabel = HDEngine.weekLabel(q.dieselWeekOf) || "—";
-  const fuelRow = `<tr><td>Fuel surcharge</td><td>${HDEngine.percentText(q.surchargePercent)} of delivery · week of ${esc(weekLabel)} · ${HDEngine.dollarsPerGal(q.dieselPrice, 3)}/gal</td></tr>`;
+  const fuelRow = `<tr><td colspan="2">${esc(HDEngine.fuelSentence(q))}</td></tr>`;
 
   $("print-root").innerHTML = `
     <section class="sheet">
@@ -1344,7 +1346,8 @@ function buildPrint(ticket) {
         Delivery ${HDEngine.money(q.deliveryFee)}<br>
         ${q.forkliftFee ? "Forklift / extra equipment " + HDEngine.money(q.forkliftFee) + "<br>" : ""}
         ${q.toteFee ? "Tote / bagging fee " + HDEngine.money(q.toteFee) + "<br>" : ""}
-        Fuel surcharge ${HDEngine.money(q.fuelSurcharge)} (${HDEngine.percentText(q.surchargePercent)} of delivery)<br>
+        Fuel surcharge ${HDEngine.money(q.fuelSurcharge)}<br>
+        ${esc(HDEngine.fuelSentence(q))}<br>
         ${q.tax ? "Tax " + HDEngine.money(q.tax) + "<br>" : ""}
         <strong style="font-size:22px">Total ${HDEngine.money(q.total)}</strong>
       </div>

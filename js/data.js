@@ -31,6 +31,7 @@ window.HD_DEFAULTS = {
     dieselPrice: 7.456,
     dieselBaseline: 4,
     dieselWeekOf: "2026-09-21",
+    surchargePercent: 0,
   },
   maps: {
     googleKey: "",
