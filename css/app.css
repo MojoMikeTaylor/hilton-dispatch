@@ -179,6 +179,9 @@ tr.clickable:hover { background: #faf4ea; }
 .choice em { color: var(--muted); font-style: normal; font-size: 13px; }
 
 .material-add { display: grid; grid-template-columns: 1.6fr .5fr auto; gap: 8px; align-items: end; }
+.search-book label { color: var(--burgundy); font-weight: 700; font-size: 13px; }
+.search-book input { border: 2px solid var(--burgundy); background: #fffaf3; font-size: 16px; }
+.search-book input:focus { outline: none; box-shadow: 0 0 0 3px rgba(107,21,24,.25); }
 .addr-wrap { position: relative; }
 .addr-suggest {
   position: absolute; left: 0; right: 0; top: 100%; z-index: 20;

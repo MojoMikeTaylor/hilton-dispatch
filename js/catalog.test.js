@@ -17,8 +17,8 @@ function assert(cond, msg) {
   }
 }
 
-assert(D.security.pin === "1956", "crew PIN stays 1956");
-assert(D.security.adminPassword === "4357", "admin password is 4357");
+assert(D.security.pin === "", "no default crew PIN ships in code — it comes from .env / Settings");
+assert(D.security.adminPassword === "", "no default admin password ships in code");
 assert(D.billing.dumpRate === 160 && D.billing.smallRate === 100, "dump $160 / small $100");
 assert(C.books.map((b) => b.id).join(",") === "store,flagstone,boulders,willow", "four isolated books");
 

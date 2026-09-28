@@ -148,14 +148,14 @@
 
             <h3 style="margin-top:18px">Materials</h3>
             <div id="book-tabs" class="book-tabs">
-              <button type="button" data-book="store" class="active">Store</button>
+              <button type="button" data-book="store" class="active">Bark/Mulch</button>
               <button type="button" data-book="flagstone">Flagstone</button>
-              <button type="button" data-book="boulders">Boulders / colored rock</button>
+              <button type="button" data-book="boulders">Boulders/Aggregates</button>
               <button type="button" data-book="willow">Willow Creek</button>
             </div>
             <p id="book-hint" class="muted"></p>
             <div class="material-add">
-              <div>
+              <div class="search-book">
                 <label>Search this book</label>
                 <input id="mat-search" type="text" placeholder="topsoil, cherokee, jaw run…" />
               </div>
@@ -201,11 +201,11 @@
               <button class="primary" id="save-catalog" type="button">Save book</button>
             </div>
           </div>
-          <p class="muted">Four books: Store (Aug 26 2026 sheet), Flagstone (per lb), Boulders / colored rock, Willow Creek (tons, pit prices). Do not mix Willow Creek with store yard prices. Changing a price updates immediately. Save book writes it for every yard.</p>
+          <p class="muted">Four books: Bark/Mulch (store sheet, Aug 26 2026), Flagstone (per lb), Boulders/Aggregates, Willow Creek (tons, pit prices). Do not mix Willow Creek with store yard prices. Changing a price updates immediately. Save book writes it for every yard.</p>
           <div id="catalog-tabs" class="book-tabs">
-            <button type="button" data-book="store" class="active">Store</button>
+            <button type="button" data-book="store" class="active">Bark/Mulch</button>
             <button type="button" data-book="flagstone">Flagstone</button>
-            <button type="button" data-book="boulders">Boulders / colored rock</button>
+            <button type="button" data-book="boulders">Boulders/Aggregates</button>
             <button type="button" data-book="willow">Willow Creek</button>
           </div>
           <p id="weight-helper" class="muted hidden">Approx. weights: Rock 2500 lb/yd · Sand 2600 lb/yd · Bark 900 lb/yd · Cinder 1500 lb/yd</p>
@@ -268,6 +268,7 @@
             <input id="s-pin" type="text" maxlength="8" />
             <label>Admin password (Settings)</label>
             <input id="s-admin" type="password" maxlength="32" autocomplete="off" />
+            <p id="s-cred-note" class="muted hidden">Managed by server (.env / Railway variables). Change them there and restart the server — this screen cannot change them.</p>
             <label>Google Maps API key</label>
             <input id="s-gkey" type="text" placeholder="Paste key — Maps JavaScript + Directions + Geocoding" />
             <p class="muted">Google is the preferred router. Enable Maps JavaScript API, Directions API, Geocoding API, and Places API (New) on the key. Restrict it to this site. Do not commit the key. You can also set GOOGLE_MAPS_API_KEY on Railway. OpenStreetMap still runs if the key is blank or Google errors out.</p>

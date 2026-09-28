@@ -14,8 +14,8 @@ window.HD_DEFAULTS = {
     website: "hiltonlandscapesupply.com",
   },
   security: {
-    pin: "1956",
-    adminPassword: "4357",
+    pin: "",
+    adminPassword: "",
   },
   billing: {
     dumpRate: 160,
@@ -289,9 +289,9 @@ window.HD_DEFAULTS.materials.forEach((m) => {
 
 window.HDCatalog = {
   books: [
-    { id: "store", label: "Store" },
+    { id: "store", label: "Bark/Mulch" },
     { id: "flagstone", label: "Flagstone" },
-    { id: "boulders", label: "Boulders / colored rock" },
+    { id: "boulders", label: "Boulders/Aggregates" },
     { id: "willow", label: "Willow Creek" },
   ],
   bookOf(m) {

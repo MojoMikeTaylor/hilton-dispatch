@@ -15,6 +15,7 @@ const state = {
   filter: "",
   persistTimer: null,
   serverReady: false,
+  managedCredentials: { pin: false, adminPassword: false },
   book: "store",
   catalogBook: "store",
   boardView: "live",
@@ -102,7 +103,6 @@ function normalizeStore(data) {
     security: { ...HD_DEFAULTS.security, ...(data.settings && data.settings.security) },
     maps: { ...HD_DEFAULTS.maps, ...(data.settings && data.settings.maps) },
   };
-  if (!data.settings.security.adminPassword) data.settings.security.adminPassword = HD_DEFAULTS.security.adminPassword;
   if (!data.settings.billing.forkliftRate) data.settings.billing.forkliftRate = HD_DEFAULTS.billing.forkliftRate;
   if (!Array.isArray(data.jobs)) data.jobs = [];
   data.settings.yards = applyOfficialYards(data.settings.yards);
@@ -228,6 +228,12 @@ async function applyEnvGoogleKey() {
     const res = await fetch("/api/config");
     if (!res.ok) return;
     const cfg = await res.json();
+    if (cfg && cfg.managedCredentials) {
+      state.managedCredentials = {
+        pin: !!cfg.managedCredentials.pin,
+        adminPassword: !!cfg.managedCredentials.adminPassword,
+      };
+    }
     const envKey = (cfg && cfg.googleMapsKey) || "";
     if (envKey && !(db.settings.maps.googleKey || "").trim()) {
       db.settings.maps.googleKey = envKey;
@@ -513,7 +519,11 @@ function closeAdminLock() {
 
 function attemptAdmin() {
   const typed = ($("admin-pass").value || "").trim();
-  const want = String((db.settings.security && db.settings.security.adminPassword) || "4357");
+  const want = String((db.settings.security && db.settings.security.adminPassword) || "").trim();
+  if (!want) {
+    toast("No admin password is set — set ADMIN_PASSWORD on the server");
+    return;
+  }
   if (typed && typed === want) {
     state.admin = true;
     closeAdminLock();
@@ -549,7 +559,13 @@ function pinValue() {
 
 function attemptLogin() {
   const pin = pinValue();
-  if (pin && pin === String(db.settings.security.pin || "1956")) {
+  const want = String((db.settings.security && db.settings.security.pin) || "").trim();
+  if (!want) {
+    toast("No crew PIN is set on this server — set CREW_PIN and restart");
+    document.querySelectorAll(".pin-digit").forEach((i) => i.value = "");
+    return;
+  }
+  if (pin && pin === want) {
     unlock();
   } else {
     toast("Wrong PIN");
@@ -707,9 +723,9 @@ function syncBookTabs() {
     b.classList.toggle("active", b.dataset.book === state.book);
   });
   const hints = {
-    store: "Store Price Sheet 2026 — yard retail. Search this tab only.",
+    store: "Bark/Mulch — store price sheet 2026, yard retail. Search this tab only.",
     flagstone: "Flagstone 2026 — prices per pound unless bag. Forklift fee is extra.",
-    boulders: "Boulders / colored rock flyer. Approx. weights: rock 2500 · sand 2600 · bark 900 · cinder 1500 lb/yd.",
+    boulders: "Boulders/Aggregates flyer. Approx. weights: rock 2500 · sand 2600 · bark 900 · cinder 1500 lb/yd.",
     willow: "Willow Creek pit prices in tons. Isolated from store yard prices.",
   };
   if ($("book-hint")) $("book-hint").textContent = hints[state.book] || "";
@@ -1142,6 +1158,10 @@ function renderSettings() {
   renderDieselNext();
   $("s-pin").value = s.security.pin;
   $("s-admin").value = s.security.adminPassword || "";
+  const managed = state.managedCredentials || {};
+  $("s-pin").disabled = !!managed.pin;
+  $("s-admin").disabled = !!managed.adminPassword;
+  if ($("s-cred-note")) $("s-cred-note").classList.toggle("hidden", !(managed.pin || managed.adminPassword));
   $("s-gkey").value = s.maps.googleKey || "";
   $("yard-editor").innerHTML = s.yards.map((y, i) => `
     <div class="card" style="box-shadow:none;margin-bottom:10px">
@@ -1189,10 +1209,19 @@ function saveSettings() {
     s.billing.dieselBaseline = Number(baseRaw);
   }
   if (weekRaw) s.billing.dieselWeekOf = weekRaw;
-  const nextPin = $("s-pin").value.trim() || "1956";
-  const pinChanged = nextPin !== String(s.security.pin || "1956");
-  s.security.pin = nextPin;
-  s.security.adminPassword = $("s-admin").value.trim() || "4357";
+  const managed = state.managedCredentials || {};
+  let pinChanged = false;
+  if (!managed.pin) {
+    const nextPin = $("s-pin").value.trim();
+    if (nextPin) {
+      pinChanged = nextPin !== String(s.security.pin || "");
+      s.security.pin = nextPin;
+    }
+  }
+  if (!managed.adminPassword) {
+    const nextAdmin = $("s-admin").value.trim();
+    if (nextAdmin) s.security.adminPassword = nextAdmin;
+  }
   s.maps.googleKey = $("s-gkey").value.trim();
   document.querySelectorAll("[data-y]").forEach((inp) => {
     const i = Number(inp.dataset.y);

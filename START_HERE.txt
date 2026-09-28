@@ -3,12 +3,13 @@ HILTON DISPATCH — open this on a yard computer
 1. Run node server.js (or ./serve.sh) and go to http://127.0.0.1:8756
    Railway: hilton-dispatch-production.up.railway.app
 
-2. Crew PIN is 1956. Settings admin password is 4357.
+2. Crew PIN and Settings admin password come from .env (CREW_PIN, ADMIN_PASSWORD) on the yard computer, or Railway
+   variables. When set they override Settings; change them there, not on the Settings screen. Not in this file.
 
 3. Four material books — do not mix:
-   Store = Aug 26, 2026 yard sheet
+   Bark/Mulch = Aug 26, 2026 store yard sheet
    Flagstone = 2026 sheet, mostly $/lb
-   Boulders / colored rock = boulder flyer
+   Boulders/Aggregates = boulder flyer
    Willow Creek = pit tons only. Selecting Willow Creek as origin opens this tab.
 
 4. Billing is always 1 load. Extra site minutes and extra wait minutes are 0.
@@ -18,7 +19,7 @@ HILTON DISPATCH — open this on a yard computer
    Diesel this week and week-of print as the EIA index. Pull EIA week does not change the percent.
    Dump 8% road buffer is Settings-only. Crew does not see it on the ticket.
 
-5. Settings (4357) — confirm:
+5. Settings (admin password from .env) — confirm:
    Dump $160/hr · Small $100/hr · Forklift $160/hr
    Dump-road buffer 8%
    Round trip

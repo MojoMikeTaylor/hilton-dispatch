@@ -10,7 +10,7 @@ Crew takes the call, punches the delivery address, picks the loading yard, maps 
 2. Name, phone, delivery address, which yard is loading the truck.
 3. Dump truck ($160/hr) or small truck ($100/hr). Forklift truck is optional for palletized stone. The dump-road buffer stays in Settings.
 4. Billing is always **1 load**. Extra site minutes and extra wait minutes are **0**. Forklift / extra equipment $ defaults to **0**. A driver or PO goes in Notes. Fuel surcharge is the percent typed in Settings, applied to the delivery fee only. Diesel price and week-of print as the EIA index.
-5. Search the **active material tab** (Store, Flagstone, Boulders / colored rock, Willow Creek). Choosing Willow Creek as origin defaults the picker to the Willow Creek tab. Crew can switch tabs on purpose.
+5. Search the **active material tab** (Bark/Mulch, Flagstone, Boulders/Aggregates, Willow Creek). Choosing Willow Creek as origin defaults the picker to the Willow Creek tab. Crew can switch tabs on purpose.
 6. **Calculate route** — map draws, delivery fee locks, status becomes Routed.
 7. **Print invoice + route sheet** — page 1 full math for accounting, page 2 driver sheet.
 8. **Email Nick / dispatch** — reconciliation email to dispatch@hiltonlandscaping.com.
@@ -38,9 +38,9 @@ Totals update as you type. Save persists the ticket and the book.
 
 | Tab | Source | Unit |
 |---|---|---|
-| Store | Store Price Sheet 2026 (2026-08-26) | yd / lb / ea |
+| Bark/Mulch | Store Price Sheet 2026 (2026-08-26) | yd / lb / ea |
 | Flagstone | Flagstone 2026 sheet | lb (bags are bag) |
-| Boulders / colored rock | Hilton boulders flyer | yd / lb |
+| Boulders/Aggregates | Hilton boulders flyer | yd / lb |
 | Willow Creek | Pit pricing only | ton |
 
 Willow Creek never inherits Central Point / Medford store prices. Weight helper on the boulders tab: rock 2500, sand 2600, bark 900, cinder 1500 lb/yd.
@@ -53,7 +53,7 @@ Willow Creek never inherits Central Point / Medford store prices. Weight helper 
 
 ## First-run setup
 
-1. `node server.js` (or `./serve.sh`). PIN **1956**. Settings admin **4357**.
+1. `node server.js` (or `./serve.sh`). Crew PIN and Settings admin password come from `.env` (`CREW_PIN`, `ADMIN_PASSWORD`) or Railway variables; no default ships in code.
 2. Shop rates, dump-road buffer percent, load/unload defaults, emails, Google key, tax, and book-price edits live in **Settings**. Saving a rate change asks for a second confirm. Crew ticket screen cannot edit the dump-road percent. This ticket $/hr is behind an Admin checkbox, default off.
 3. Paste a Google Maps API key in Settings (Maps JavaScript API + Directions API + Geocoding API + Places API (New)). Or set `GOOGLE_MAPS_API_KEY` on Railway. **Do not commit the key.** Leave it blank and the desk still routes on OpenStreetMap.
 4. Email stays **dispatch@hiltonlandscaping.com** unless you change it in Settings.

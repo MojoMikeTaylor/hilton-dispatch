@@ -18,6 +18,34 @@ function resolveStorePath() {
 
 const STORE = resolveStorePath();
 
+/* Credentials: process.env (or ROOT/.env) is the authority; store.json is the fallback.
+   Set CREW_PIN and ADMIN_PASSWORD in .env on the yard computer or as Railway variables. */
+function loadDotEnv(file) {
+  try {
+    fs.readFileSync(file, "utf8").split(/\r?\n/).forEach((line) => {
+      const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/.exec(line);
+      if (!m || line.trim().startsWith("#")) return;
+      const val = m[2].replace(/^["']|["']$/g, "");
+      if (process.env[m[1]] === undefined) process.env[m[1]] = val;
+    });
+  } catch (e) { /* no .env */ }
+}
+loadDotEnv(path.join(ROOT, ".env"));
+
+function envSecurity() {
+  const out = {};
+  if (process.env.CREW_PIN) out.pin = String(process.env.CREW_PIN).trim();
+  if (process.env.ADMIN_PASSWORD) out.adminPassword = String(process.env.ADMIN_PASSWORD).trim();
+  return out;
+}
+
+function applyEnvSecurity(settings) {
+  const env = envSecurity();
+  if (!settings || !Object.keys(env).length) return settings;
+  settings.security = { ...(settings.security || {}), ...env };
+  return settings;
+}
+
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
@@ -48,7 +76,7 @@ function readStore() {
   try {
     const raw = fs.readFileSync(STORE, "utf8");
     const data = JSON.parse(raw);
-    return { seeded: false, settings: data.settings || null, jobs: Array.isArray(data.jobs) ? data.jobs : [], customers: Array.isArray(data.customers) ? data.customers : [] };
+    return { seeded: false, settings: applyEnvSecurity(data.settings || null), jobs: Array.isArray(data.jobs) ? data.jobs : [], customers: Array.isArray(data.customers) ? data.customers : [] };
   } catch (e) {
     return { seeded: true, settings: null, jobs: [], customers: [] };
   }
@@ -187,7 +215,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.split("?")[0] === "/api/config" && method === "GET") {
-    sendJson(res, 200, { googleMapsKey: process.env.GOOGLE_MAPS_API_KEY || "" });
+    const env = envSecurity();
+    sendJson(res, 200, {
+      googleMapsKey: process.env.GOOGLE_MAPS_API_KEY || "",
+      managedCredentials: { pin: !!env.pin, adminPassword: !!env.adminPassword },
+    });
     return;
   }
 
@@ -242,7 +274,7 @@ const server = http.createServer(async (req, res) => {
       const data = JSON.parse(raw);
       if (!data || typeof data !== "object") throw new Error("bad store");
       const out = {
-        settings: data.settings || null,
+        settings: applyEnvSecurity(data.settings || null),
         jobs: Array.isArray(data.jobs) ? data.jobs : [],
         customers: Array.isArray(data.customers) ? data.customers : [],
         savedAt: new Date().toISOString(),
@@ -266,4 +298,8 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, "0.0.0.0", () => {
   console.log("Hilton Dispatch → http://0.0.0.0:" + PORT);
   console.log("Store file: " + STORE);
+  const env = envSecurity();
+  console.log("Credentials: " + (Object.keys(env).length
+    ? "from env (" + Object.keys(env).map((k) => k === "pin" ? "CREW_PIN" : "ADMIN_PASSWORD").join(", ") + ")"
+    : "from store.json settings.security (no CREW_PIN / ADMIN_PASSWORD set)"));
 });
