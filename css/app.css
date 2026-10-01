@@ -279,6 +279,12 @@ tr.clickable:hover { background: #faf4ea; }
 html.preview-mode #login { display: none !important; }
 html.preview-mode #app { display: flex !important; }
 .hidden { display: none !important; }
+.desk-result {
+  background: #f4e3b5; color: #5a3d08; border: 1px solid #e0c57a;
+  border-radius: 10px; padding: 10px 14px; margin-top: 10px;
+  font-size: 14px; line-height: 1.45; white-space: pre-wrap;
+}
+.desk-result.warn { background: #f8d7c4; border-color: #9a3412; color: #7a2e0e; }
 .empty { color: var(--muted); padding: 18px 4px; }
 
 @media (max-width: 900px) {

@@ -76,7 +76,13 @@ function readStore() {
   try {
     const raw = fs.readFileSync(STORE, "utf8");
     const data = JSON.parse(raw);
-    return { seeded: false, settings: applyEnvSecurity(data.settings || null), jobs: Array.isArray(data.jobs) ? data.jobs : [], customers: Array.isArray(data.customers) ? data.customers : [] };
+    return {
+      seeded: false,
+      settings: applyEnvSecurity(data.settings || null),
+      jobs: Array.isArray(data.jobs) ? data.jobs : [],
+      customers: Array.isArray(data.customers) ? data.customers : [],
+      savedAt: data.savedAt || null,
+    };
   } catch (e) {
     return { seeded: true, settings: null, jobs: [], customers: [] };
   }

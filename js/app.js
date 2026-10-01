@@ -19,6 +19,8 @@ const state = {
   book: "store",
   catalogBook: "store",
   boardView: "live",
+  deskBusy: false,
+  deskToken: 0,
 };
 
 function lockTicketMath(draft) {
@@ -205,13 +207,17 @@ async function bootStore() {
       const empty = payload.seeded || !payload.settings || (!(payload.jobs || []).length && !(payload.settings && payload.settings.materials && payload.settings.materials.length));
       if (empty && local && ((local.jobs || []).length || (local.settings && local.settings.materials))) {
         db = normalizeStore(local);
+        db.savedAt = local.savedAt || payload.savedAt || null;
+        captureBookIfMissing();
         await putStore(db);
         return;
       }
       if (payload.settings) {
         db = normalizeStore(payload);
+        db.savedAt = payload.savedAt || null;
         cacheLocal(db);
         state.serverReady = true;
+        if (captureBookIfMissing()) saveStore(db, true);
         return;
       }
     }
@@ -219,8 +225,37 @@ async function bootStore() {
     state.serverReady = false;
   }
   db = normalizeStore(local || seedStore());
+  db.savedAt = (local && local.savedAt) || null;
   cacheLocal(db);
+  captureBookIfMissing();
   await putStore(db);
+}
+
+function bookArchive() {
+  if (!db.settings.bookArchive || typeof db.settings.bookArchive !== "object") {
+    db.settings.bookArchive = {};
+  }
+  return db.settings.bookArchive;
+}
+
+function captureBookIfMissing() {
+  const archive = bookArchive();
+  const saved = archive.lastSaved;
+  if (saved && Array.isArray(saved.materials) && saved.materials.length) return false;
+  const materials = JSON.parse(JSON.stringify(db.settings.materials || []));
+  if (!materials.length) return false;
+  const savedAt = db.settings.bookSavedAt || db.savedAt || null;
+  archive.lastSaved = { materials, savedAt, rows: materials.length };
+  if (!db.settings.bookSavedAt && savedAt) db.settings.bookSavedAt = savedAt;
+  return true;
+}
+
+function rememberBookSave() {
+  const materials = JSON.parse(JSON.stringify(db.settings.materials || []));
+  const savedAt = new Date().toISOString();
+  const archive = bookArchive();
+  archive.lastSaved = { materials, savedAt, rows: materials.length };
+  db.settings.bookSavedAt = savedAt;
 }
 
 async function applyEnvGoogleKey() {
@@ -526,6 +561,7 @@ function attemptAdmin() {
   }
   if (typed && typed === want) {
     state.admin = true;
+    syncAdminBookTools();
     closeAdminLock();
     show("settings");
   } else {
@@ -538,6 +574,7 @@ function attemptAdmin() {
 function lock() {
   state.session = false;
   state.admin = false;
+  syncAdminBookTools();
   closeAdminLock();
   $("app").classList.add("hidden");
   $("login").classList.remove("hidden");
@@ -1232,7 +1269,17 @@ function saveSettings() {
   toast(pinChanged ? "PIN updated" : "Settings saved");
 }
 
+function syncAdminBookTools() {
+  const btn = $("reload-sheet");
+  if (!btn) return;
+  const showBtn = !!state.admin;
+  btn.classList.toggle("hidden", !showBtn);
+  btn.hidden = !showBtn;
+  btn.disabled = !showBtn;
+}
+
 function renderCatalog() {
+  syncAdminBookTools();
   const book = state.catalogBook || "store";
   document.querySelectorAll("#catalog-tabs [data-book]").forEach((b) => {
     b.classList.toggle("active", b.dataset.book === book);
@@ -1261,6 +1308,7 @@ function onCatalogEdit(e) {
   if (!db.settings.materials[i]) return;
   db.settings.materials[i][k] = k === "price" ? Number(inp.value) || 0 : inp.value;
   db.settings.catalogConfirmed = !catalogNeedsPrices();
+  rememberBookSave();
   saveStore(db, false);
 }
 
@@ -1272,6 +1320,7 @@ function saveCatalog() {
     db.settings.materials[i][k] = k === "price" ? Number(inp.value) || 0 : inp.value;
   });
   db.settings.catalogConfirmed = !catalogNeedsPrices();
+  rememberBookSave();
   saveStore(db, true);
   toast(catalogNeedsPrices() ? "Book saved — some yard prices are still $0" : "Material book saved");
 }
@@ -1285,6 +1334,7 @@ function addCatalogRow() {
     price: 0,
     book: state.catalogBook || "store",
   });
+  rememberBookSave();
   saveStore(db, true);
   renderCatalog();
 }
@@ -1545,6 +1595,183 @@ function seedPreview() {
   saveStore(db, true);
 }
 
+function formatDeskTime(iso) {
+  if (!iso) return "unknown";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "unknown";
+  try {
+    return d.toLocaleString("en-US", { timeZone: "America/Los_Angeles", dateStyle: "medium", timeStyle: "short" });
+  } catch (e) {
+    return d.toISOString().slice(0, 16).replace("T", " ");
+  }
+}
+
+function deskSecrets() {
+  const sec = (db.settings && db.settings.security) || {};
+  const maps = (db.settings && db.settings.maps) || {};
+  return [maps.googleKey, sec.pin, sec.adminPassword];
+}
+
+function showDeskResult(text, warn) {
+  ["desk-result-board", "desk-result-ticket"].forEach((id) => {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = text;
+    el.classList.remove("hidden");
+    el.classList.toggle("warn", !!warn);
+  });
+}
+
+function currentDeskTarget() {
+  const ticket = state.view === "new" && $("f-address") ? $("f-address").value.trim() : "";
+  const yardId = state.view === "new" && $("f-yard") ? $("f-yard").value : state.draft.yardId;
+  const yard = yardById(yardId);
+  return HDDesk.mapTarget(ticket, yard && yard.address);
+}
+
+async function retryDeskMaps(target) {
+  const token = ++state.deskToken;
+  const gate = { open: true };
+  const run = runDeskMaps(target, token, gate);
+  const timed = new Promise((resolve) => setTimeout(() => resolve({ provider: "" }), 20000));
+  const result = await Promise.race([run, timed]);
+  gate.open = false;
+  return result;
+}
+
+async function runDeskMaps(target, token, gate) {
+  const address = target && target.address;
+  if (!address) return { provider: "" };
+  const yardId = state.view === "new" && $("f-yard") ? $("f-yard").value : state.draft.yardId;
+  const yard = yardById(yardId);
+  const key = (db.settings.maps && db.settings.maps.googleKey) || "";
+  const live = () => gate.open && state.deskToken === token && state.view === "new";
+  if (target.source === "ticket" && yard && yard.address && address !== yard.address) {
+    try {
+      const route = await HDMaps.route(yard.address, address, yard, key);
+      if (live() && route) {
+        state.route = route;
+        state.draft.address = address;
+        state.draft.yardId = yard.id;
+        drawMap(route);
+        renderQuoteBox();
+      }
+      return { provider: (route && route.provider) || "" };
+    } catch (err) {
+      return { provider: "" };
+    }
+  }
+  const probe = await HDMaps.probe(address, key);
+  if (live() && probe && probe.hit) {
+    drawMap({ provider: probe.provider, from: probe.hit, to: probe.hit });
+  }
+  return { provider: (probe && probe.provider) || "" };
+}
+
+function confirmRestoreBook() {
+  const saved = db.settings.bookArchive && db.settings.bookArchive.lastSaved;
+  if (!saved || !Array.isArray(saved.materials) || !saved.materials.length) {
+    return { yes: false, missing: true };
+  }
+  const when = formatDeskTime(saved.savedAt);
+  const first = window.confirm(
+    "Restore the last book this app saved (" + saved.materials.length + " rows, " + when + ")? This does not load the Aug 26 sheet."
+  );
+  if (!first) return { yes: false, missing: false };
+  const second = window.confirm(
+    "Second confirm: snapshot the current book, then restore that save. Added rows from the last save come back. The Aug 26 sheet is not loaded."
+  );
+  return { yes: !!second, missing: false };
+}
+
+function restoreLastSavedBook() {
+  const archive = bookArchive();
+  const result = HDDesk.restoreBook(db.settings.materials, archive.lastSaved);
+  if (!result.ok) return result;
+  archive.preRestore = {
+    materials: result.preRestore,
+    savedAt: new Date().toISOString(),
+    rows: result.preRestore.length,
+  };
+  db.settings.materials = result.materials;
+  if (result.savedAt) db.settings.bookSavedAt = result.savedAt;
+  saveStore(db, true);
+  if (state.view === "catalog") renderCatalog();
+  if (state.view === "new" && $("mat-search")) materialSearch($("mat-search").value);
+  return result;
+}
+
+function replaceBookWithAug26() {
+  if (!state.admin) {
+    toast("Admin password required");
+    openAdminLock();
+    return;
+  }
+  if (!window.confirm("Replace the book with the Aug 26 sheet? Added rows will be deleted. Jobs and customers stay.")) return;
+  captureBookIfMissing();
+  db.settings.materials = HDCatalog.publishedSheet();
+  db.settings.priceSheet = HD_DEFAULTS.priceSheet;
+  db.settings.catalogConfirmed = !catalogNeedsPrices();
+  saveStore(db, true);
+  renderCatalog();
+  toast("Aug 26 sheet loaded — added rows removed");
+}
+
+async function reportDeskProblem() {
+  if (state.deskBusy) return;
+  state.deskBusy = true;
+  const buttons = ["desk-problem-board", "desk-problem-ticket"].map($).filter(Boolean);
+  buttons.forEach((b) => { b.disabled = true; });
+  showDeskResult("Checking maps…\nHard refresh once.");
+  try {
+    const target = currentDeskTarget();
+    const maps = await retryDeskMaps(target);
+    const savedLabel = formatDeskTime(db.settings.bookSavedAt || db.savedAt);
+    let text = HDDesk.resultText({
+      provider: maps && maps.provider,
+      rows: (db.settings.materials || []).length,
+      savedAtLabel: savedLabel,
+      checked: target.source,
+    });
+    showDeskResult(text, (db.settings.materials || []).length < HDDesk.ROW_WARN);
+    const choice = confirmRestoreBook();
+    let restored = 0;
+    let extra = "";
+    if (choice.yes) {
+      const result = restoreLastSavedBook();
+      if (result.ok) restored = result.materials.length;
+      else extra = "Did not restore. No app-saved book. The Aug 26 sheet was not loaded.";
+    } else if (choice.missing) {
+      extra = "No app-saved book to restore. The Aug 26 sheet was not loaded.";
+    }
+    text = HDDesk.resultText({
+      provider: maps && maps.provider,
+      rows: (db.settings.materials || []).length,
+      savedAtLabel: formatDeskTime(db.settings.bookSavedAt || db.savedAt),
+      checked: target.source,
+      restored,
+      extra,
+    });
+    text = HDDesk.scrub(text, deskSecrets());
+    showDeskResult(text, (db.settings.materials || []).length < HDDesk.ROW_WARN);
+    window.location.href = HDDesk.emailHref(text, deskSecrets());
+    toast("Opened email to Mike");
+  } catch (err) {
+    const text = HDDesk.scrub(HDDesk.resultText({
+      provider: "",
+      rows: (db.settings.materials || []).length,
+      savedAtLabel: formatDeskTime(db.settings.bookSavedAt || db.savedAt),
+      checked: "yard",
+    }), deskSecrets());
+    showDeskResult(text, true);
+    window.location.href = HDDesk.emailHref(text, deskSecrets());
+    toast("Opened email to Mike");
+  } finally {
+    state.deskBusy = false;
+    buttons.forEach((b) => { b.disabled = false; });
+  }
+}
+
 async function onReady() {
   await bootStore();
   await ensureCustomers();
@@ -1781,15 +2008,9 @@ async function onReady() {
   if ($("s-diesel-week")) $("s-diesel-week").addEventListener("change", renderDieselNext);
   $("save-catalog").addEventListener("click", saveCatalog);
   $("add-catalog").addEventListener("click", addCatalogRow);
-  $("reload-sheet").addEventListener("click", () => {
-    if (!confirm("Reload published Store / Flagstone / Boulders / Willow Creek sheets? Custom rows you added stay.")) return;
-    db.settings.materials = HDCatalog.reloadRetailKeepExtras(db.settings.materials);
-    db.settings.priceSheet = HD_DEFAULTS.priceSheet;
-    db.settings.catalogConfirmed = true;
-    saveStore(db, true);
-    renderCatalog();
-    toast("2026 price sheet loaded — quarry and flagstone kept");
-  });
+  $("reload-sheet").addEventListener("click", replaceBookWithAug26);
+  $("desk-problem-board").addEventListener("click", reportDeskProblem);
+  $("desk-problem-ticket").addEventListener("click", reportDeskProblem);
   $("test-google").addEventListener("click", async () => {
     const key = $("s-gkey").value.trim();
     if (!key) { toast("Paste a Google Maps API key first"); return; }
@@ -1816,6 +2037,7 @@ async function onReady() {
   $("catalog-table").addEventListener("click", (e) => {
     if (e.target.dataset.cd != null) {
       db.settings.materials.splice(Number(e.target.dataset.cd), 1);
+      rememberBookSave();
       saveStore(db, true);
       renderCatalog();
     }

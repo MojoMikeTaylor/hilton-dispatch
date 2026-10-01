@@ -307,4 +307,27 @@ window.HDMaps = {
     this.lastRoute = { from, to, ...r };
     return this.lastRoute;
   },
+
+  async probe(address, googleKey) {
+    const addr = (address || "").trim();
+    if (!addr) return { provider: "", backup: true };
+    const key = (googleKey || "").trim();
+    if (key) {
+      try {
+        const ready = await this.ensureGoogle(key);
+        if (ready) {
+          const hit = await this.geocodeGoogle(addr);
+          return { provider: "google", backup: false, hit };
+        }
+      } catch (err) {
+        console.warn("Google maps probe failed", err && err.message);
+      }
+    }
+    try {
+      const hit = await this.geocodeNominatim(addr);
+      return { provider: "nominatim", backup: true, hit };
+    } catch (err) {
+      return { provider: "", backup: true };
+    }
+  },
 };

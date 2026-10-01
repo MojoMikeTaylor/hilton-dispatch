@@ -66,9 +66,11 @@
                 <button type="button" data-board="parked">Done / void</button>
                 <button type="button" data-board="all">All</button>
               </div>
+              <button class="ghost" id="desk-problem-board" type="button">Something's wrong</button>
               <button class="ghost" id="export-csv" type="button">Export CSV</button>
             </div>
           </div>
+          <div id="desk-result-board" class="desk-result hidden"></div>
           <div id="job-table"></div>
         </div>
       </section>
@@ -182,9 +184,13 @@
           </div>
           <div>
             <div class="card" style="margin-bottom:14px">
-              <h3>Route</h3>
+              <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap">
+                <h3 style="margin:0">Route</h3>
+                <button class="ghost" id="desk-problem-ticket" type="button">Something's wrong</button>
+              </div>
               <div id="map" class="map-frame"></div>
               <p class="muted" style="margin:8px 0 0" id="map-hint">Google Maps if a key is saved in Settings. OpenStreetMap is the fallback so the desk still works without one.</p>
+              <div id="desk-result-ticket" class="desk-result hidden"></div>
             </div>
             <div class="quote-box" id="quote-box"></div>
           </div>
@@ -196,7 +202,7 @@
           <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
             <h2>Material book</h2>
             <div class="btn-row" style="margin:0">
-              <button class="ghost" id="reload-sheet" type="button">Reload 2026 price sheet</button>
+              <button class="ghost hidden" id="reload-sheet" type="button" hidden>Replace book with Aug 26 sheet — deletes added rows.</button>
               <button class="ghost" id="add-catalog" type="button">Add material</button>
               <button class="primary" id="save-catalog" type="button">Save book</button>
             </div>
@@ -327,6 +333,7 @@
   <script src="js/data.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/maps.js"></script>
+  <script src="js/desk.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

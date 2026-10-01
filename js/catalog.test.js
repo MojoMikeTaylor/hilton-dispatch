@@ -102,6 +102,12 @@ assert(!dropped.some((m) => m.id === "red-cinder"), "reload does not bring the c
 assert(dropped.find((m) => m.id === "red-cinder-112").price === 40, "reload uses the published split price");
 assert(dropped.find((m) => m.id === "sku-custom").price === 12, "reload still keeps custom rows");
 
+const published = C.publishedSheet();
+assert(published.length === D.materials.length, "published sheet is the Aug 26 book");
+assert(!published.some((m) => m.id === "sku-custom"), "published sheet drops added rows");
+published[0].price = 1;
+assert(D.materials[0].price !== 1, "published sheet is a copy");
+
 if (process.exitCode) {
   console.error("Catalog tests failed.");
 } else {

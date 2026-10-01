@@ -377,4 +377,7 @@ window.HDCatalog = {
     const extras = (existing || []).filter((m) => m && !publishedIds.has(m.id) && !retired.has(m.id));
     return JSON.parse(JSON.stringify(window.HD_DEFAULTS.materials)).concat(extras);
   },
+  publishedSheet() {
+    return JSON.parse(JSON.stringify(window.HD_DEFAULTS.materials || []));
+  },
 };
