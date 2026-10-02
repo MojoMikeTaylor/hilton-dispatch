@@ -138,6 +138,25 @@
               </div>
             </div>
             <label class="inline-check"><input id="f-quote" type="checkbox" /> Quote only — same math, not a live delivery</label>
+            <div class="pay-block">
+              <div class="row">
+                <div><label>Payment</label>
+                  <select id="f-pay">
+                    <option value="">— pick at delivery —</option>
+                    <option value="cod">COD (check)</option>
+                    <option value="credit">Credit</option>
+                    <option value="cash">Cash</option>
+                    <option value="charge">Charge</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="inline-check"><input id="f-paid" type="checkbox" /> Paid</label>
+                  <input id="f-paid-by" type="text" placeholder="Marked paid by (name)" autocomplete="off" />
+                </div>
+              </div>
+              <label class="inline-check"><input id="f-cust-copy" type="checkbox" /> Customer asked for an emailed copy</label>
+              <p class="muted" style="margin:6px 0 0">Email goes to Nick and Grace. No card numbers on the ticket. Clover takes the money; nothing auto-charges.</p>
+            </div>
             <label>Tote / bagging fee</label>
             <input id="f-tote-fee" type="number" min="0" step="0.01" inputmode="decimal" placeholder="" />
             <div id="forklift-fee-wrap">
@@ -177,7 +196,7 @@
               <button class="primary" id="calc-btn" type="button">Calculate route</button>
               <button class="ghost" id="save-btn" type="button">Save ticket</button>
               <button class="ok" id="print-inv" type="button">Print invoice + route sheet</button>
-              <button class="ghost" id="email-acct" type="button">Email Nick / dispatch</button>
+              <button class="ghost" id="email-acct" type="button">Email Nick &amp; Grace</button>
               <button class="ghost" id="void-btn" type="button">Void mishap</button>
               <button class="ghost" id="delete-btn" type="button">Delete</button>
             </div>
@@ -334,6 +353,7 @@
   <script src="js/engine.js"></script>
   <script src="js/maps.js"></script>
   <script src="js/desk.js"></script>
+  <script src="js/receipt.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

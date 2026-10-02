@@ -78,6 +78,11 @@ function blankDraft() {
     noAccount: true,
     cod: false,
     jobFromAccount: false,
+    payMethod: "",
+    paid: false,
+    paidBy: "",
+    paidAt: null,
+    customerCopy: false,
   };
 }
 
@@ -801,6 +806,11 @@ function renderForm() {
   $("f-forklift-fee").value = d.forkliftFee || 0;
   $("f-status").value = normalizeStatus(d.status);
   if ($("f-quote")) $("f-quote").checked = isQuoteStatus(d.status);
+  HDReceipt.normalize(d);
+  if ($("f-pay")) $("f-pay").value = d.payMethod || "";
+  if ($("f-paid")) $("f-paid").checked = !!d.paid;
+  if ($("f-paid-by")) $("f-paid-by").value = d.paidBy || "";
+  if ($("f-cust-copy")) $("f-cust-copy").checked = !!d.customerCopy;
   const truck = d.truck || "dump";
   $("f-truck-dump").checked = truck === "dump";
   $("f-truck-small").checked = truck === "small";
@@ -1006,6 +1016,14 @@ function collectForm() {
   state.draft.adminRate = !!($("f-admin-rate") && $("f-admin-rate").checked);
   state.draft.rateOverride = state.draft.adminRate ? Number($("f-rate").value) : null;
   state.draft.quarryDirect = isQuarryYard(state.draft.yardId);
+  // Payment: method, paid yes/no, who marked it, when. Time is stamped the first time Paid is ticked.
+  const wasPaid = !!state.draft.paid;
+  state.draft.payMethod = $("f-pay") ? $("f-pay").value : "";
+  state.draft.paid = !!($("f-paid") && $("f-paid").checked);
+  state.draft.paidBy = $("f-paid-by") ? $("f-paid-by").value.trim() : "";
+  if (state.draft.paid && (!wasPaid || !state.draft.paidAt)) state.draft.paidAt = new Date().toISOString();
+  state.draft.customerCopy = !!($("f-cust-copy") && $("f-cust-copy").checked);
+  HDReceipt.normalize(state.draft);
 }
 
 function voidTicket() {
@@ -1043,6 +1061,11 @@ function saveTicket(status) {
     toast("Customer and delivery address are required");
     return null;
   }
+  const payErr = HDReceipt.validate(state.draft);
+  if (payErr) {
+    toast(payErr);
+    return null;
+  }
   const q = currentQuote();
   const existing = state.draft.id && db.jobs.find((j) => j.id === state.draft.id);
   const ticket = {
@@ -1071,6 +1094,7 @@ function openTicket(id) {
   if (!Array.isArray(state.draft.materials)) state.draft.materials = [];
   if (state.draft.forkliftFee == null) state.draft.forkliftFee = 0;
   if (state.draft.toteFee == null) state.draft.toteFee = 0;
+  HDReceipt.normalize(state.draft);
   lockTicketMath(state.draft);
   state.draft.status = normalizeStatus(state.draft.status);
   state.route = job.route || null;
@@ -1375,6 +1399,15 @@ function buildPrint(ticket) {
   const truckLine = `${truckName(ticket.truck)} @ ${HDEngine.money(q.rate)}/hr`;
   const weekLabel = HDEngine.weekLabel(q.dieselWeekOf) || "—";
   const fuelRow = `<tr><td colspan="2">${esc(HDEngine.fuelSentence(q))}</td></tr>`;
+  const payLine = HDReceipt.paymentLine(ticket);
+  const notes = HDReceipt.scrubCardNumbers(ticket.notes || "");
+  const soldTo = ticket.cod || (ticket.noAccount && !ticket.qbName)
+    ? ticket.customer || "—"
+    : ticket.qbName || ticket.customer;
+  const receiptRows = (q.lines || []).map((l) =>
+    `<tr><td>${esc(l.name)}</td><td>${l.qty} ${esc(l.unit)}</td></tr>`
+  ).join("") || `<tr><td colspan="2">Delivery only</td></tr>`;
+  const loadSummary = HDReceipt.loadSummary(q.lines);
 
   $("print-root").innerHTML = `
     <section class="sheet">
@@ -1428,10 +1461,11 @@ function buildPrint(ticket) {
         Fuel surcharge ${HDEngine.money(q.fuelSurcharge)}<br>
         ${esc(HDEngine.fuelSentence(q))}<br>
         ${q.tax ? "Tax " + HDEngine.money(q.tax) + "<br>" : ""}
-        <strong style="font-size:22px">Total ${HDEngine.money(q.total)}</strong>
+        <strong style="font-size:22px">Total ${HDEngine.money(q.total)}</strong><br>
+        <span style="font-size:13px">${esc(payLine)}</span>
       </div>
       <div class="recon">${esc(q.formula || "")}</div>
-      <p class="muted">${esc(ticket.notes || "")}</p>
+      <p class="muted">${esc(notes)}</p>
     </section>
     <section class="sheet">
       <div class="sheet-head">
@@ -1457,7 +1491,7 @@ function buildPrint(ticket) {
       <table><thead><tr><th>Material</th><th>Qty</th></tr></thead><tbody>
         ${(ticket.materials || []).map((m) => `<tr><td>${esc(m.name)}</td><td>${m.qty} ${esc(m.unit)}</td></tr>`).join("") || "<tr><td colspan=2>See dispatcher</td></tr>"}
       </tbody></table>
-      <p><strong>Notes:</strong> ${esc(ticket.notes || "None")}</p>
+      <p><strong>Notes:</strong> ${esc(notes || "None")}</p>
       <p><strong>Time:</strong>
          ${q.isDump ? "Dump route buffer × " + Number(q.multiplier).toFixed(2) + " already on the ticket." : q.isForklift ? "Forklift truck — no dump buffer." : "Small truck — no dump buffer."}
          ${q.forkliftFee ? " Forklift / extra fee " + HDEngine.money(q.forkliftFee) + "." : ""}</p>
@@ -1468,20 +1502,48 @@ function buildPrint(ticket) {
         <div><div class="line">Driver signature / time out</div></div>
         <div><div class="line">Customer received by / time in</div></div>
       </div>
+    </section>
+    <section class="sheet receipt">
+      <div class="sheet-head">
+        <div>
+          <h1>CUSTOMER RECEIPT</h1>
+          <div>${esc(co.name)} · ${esc(co.phone)}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:22px;font-weight:700">${esc(ticket.id)}</div>
+          <div>${when}</div>
+        </div>
+      </div>
+      <div class="row">
+        <div><strong>Name</strong><br>${esc(soldTo)}</div>
+        <div><strong>Delivered to</strong><br>${esc(ticket.address)}</div>
+      </div>
+      <h3 style="margin-top:14px">Material</h3>
+      <table><thead><tr><th>Material</th><th>Yards / tons</th></tr></thead><tbody>${receiptRows}</tbody></table>
+      ${loadSummary ? `<div style="margin-top:6px"><strong>Load:</strong> ${esc(loadSummary)}</div>` : ""}
+      <div class="receipt-total">Total ${HDEngine.money(q.total)}</div>
+      <div style="text-align:right;margin-top:4px">${esc(payLine)}</div>
+      <div class="worksite">
+        ${esc(HDReceipt.WORKSITE)}
+        <div class="sig">
+          <div><div class="line">Customer name (print)</div></div>
+          <div><div class="line">Customer signature</div></div>
+        </div>
+      </div>
     </section>`;
 }
 
 function emailAccounting(ticket) {
   const q = ticket.quote;
   const yard = yardById(ticket.yardId);
-  const to = db.settings.company.accountingEmail || db.settings.company.email;
+  const rcpt = HDReceipt.recipients(ticket);
   const quarry = ticket.quarryDirect || isQuarryYard(ticket.yardId);
   const quoting = isQuoteStatus(ticket.status);
   const subject = quoting
     ? `Hilton Dispatch QUOTE ${ticket.id} — ${ticket.customer} — ${HDEngine.money(q.total)}`
     : `Hilton Dispatch ${ticket.id} — ${ticket.customer} — ${HDEngine.money(q.total)}`;
   const body = [
-    quoting ? `HILTON DISPATCH QUOTE — not a live delivery` : `HILTON DISPATCH RECONCILIATION — send to Nick`,
+    quoting ? `HILTON DISPATCH QUOTE — not a live delivery` : `HILTON DISPATCH TICKET — Nick and Grace`,
     `Ticket: ${ticket.id}`,
     quarry ? `Label: Quarry direct — truckload` : null,
     `Date: ${ticket.createdAt}`,
@@ -1498,6 +1560,7 @@ function emailAccounting(ticket) {
     `Mapped one-way: ${(q.oneWayMin || 0).toFixed(1)} min`,
     q.forkliftFee ? `Forklift / extra equipment fee: ${HDEngine.money(q.forkliftFee)}` : `Forklift / extra equipment fee: $0.00`,
     q.toteFee ? `Tote / bagging fee: ${HDEngine.money(q.toteFee)}` : null,
+    `Fuel surcharge: ${HDEngine.money(q.fuelSurcharge)}`,
     `Diesel week of ${HDEngine.weekLabel(q.dieselWeekOf) || "—"}`,
     ``,
     q.formula,
@@ -1506,27 +1569,29 @@ function emailAccounting(ticket) {
     ...(q.lines || []).map((l) => `  - ${l.qty} ${l.unit} ${l.name} @ ${HDEngine.money(l.price)} = ${HDEngine.money(l.amount)}`),
     ``,
     `TOTAL DUE: ${HDEngine.money(q.total)}`,
+    `Payment: ${HDReceipt.paymentLine(ticket)}`,
+    ticket.customerCopy && ticket.email ? `Customer copy: CC ${ticket.email} (asked for a copy)` : `Customer copy: not requested`,
     ``,
-    `Notes: ${ticket.notes || "none"}`,
+    `Notes: ${HDReceipt.scrubCardNumbers(ticket.notes) || "none"}`,
   ].filter((line) => line !== null).join("\n");
   if (!quoting) {
     ticket.status = "emailed";
     const idx = db.jobs.findIndex((j) => j.id === ticket.id);
     if (idx >= 0) { db.jobs[idx].status = "emailed"; saveStore(db, true); }
   }
-  const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  window.location.href = mailto;
-  toast("Opened email to accounting");
+  openMailto(HDReceipt.mailtoHref(rcpt, subject, body));
+  toast(rcpt.cc.length ? "Opened email to Nick & Grace, customer CC'd" : "Opened email to Nick & Grace");
 }
 
 function exportCsv() {
-  const rows = [["ticket", "date", "customer", "phone", "address", "yard", "truck", "hours", "delivery", "materials", "forklift_fee", "tote_fee", "fuel_surcharge", "total", "status"]];
+  const rows = [["ticket", "date", "customer", "phone", "address", "yard", "truck", "hours", "delivery", "materials", "forklift_fee", "tote_fee", "fuel_surcharge", "total", "status", "payment", "paid", "paid_by", "paid_at"]];
   db.jobs.forEach((j) => {
     const y = yardById(j.yardId);
     rows.push([
       j.id, j.createdAt, j.customer, j.phone, j.address, y && y.name, j.truck,
       j.quote && j.quote.billableHours, j.quote && j.quote.deliveryFee, j.quote && j.quote.materialsTotal,
-      j.quote && j.quote.forkliftFee, j.quote && j.quote.toteFee, j.quote && j.quote.fuelSurcharge, j.quote && j.quote.total, j.status
+      j.quote && j.quote.forkliftFee, j.quote && j.quote.toteFee, j.quote && j.quote.fuelSurcharge, j.quote && j.quote.total, j.status,
+      HDReceipt.methodLabel(j.payMethod), j.paid ? "yes" : "no", j.paidBy || "", j.paidAt || ""
     ]);
   });
   const csv = rows.map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -1999,9 +2064,10 @@ async function onReady() {
       e.stopPropagation();
       const job = db.jobs.find((j) => j.id === dup.dataset.dup);
       if (!job) return;
-      state.draft = { ...JSON.parse(JSON.stringify(job)), id: null, createdAt: null, status: "new" };
+      state.draft = { ...JSON.parse(JSON.stringify(job)), id: null, createdAt: null, status: "new", paid: false, paidBy: "", paidAt: null };
       if (state.draft.forkliftFee == null) state.draft.forkliftFee = 0;
       if (state.draft.toteFee == null) state.draft.toteFee = 0;
+      HDReceipt.normalize(state.draft);
       lockTicketMath(state.draft);
       state.route = job.route || null;
       state.quote = job.quote || null;
