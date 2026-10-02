@@ -1612,6 +1612,15 @@ function deskSecrets() {
   return [maps.googleKey, sec.pin, sec.adminPassword];
 }
 
+function openMailto(href) {
+  const a = document.createElement("a");
+  a.href = href;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 function showDeskResult(text, warn) {
   ["desk-result-board", "desk-result-ticket"].forEach((id) => {
     const el = $(id);
@@ -1754,7 +1763,7 @@ async function reportDeskProblem() {
     });
     text = HDDesk.scrub(text, deskSecrets());
     showDeskResult(text, (db.settings.materials || []).length < HDDesk.ROW_WARN);
-    window.location.href = HDDesk.emailHref(text, deskSecrets());
+    openMailto(HDDesk.emailHref(text, deskSecrets()));
     toast("Opened email to Mike");
   } catch (err) {
     const text = HDDesk.scrub(HDDesk.resultText({
@@ -1764,7 +1773,7 @@ async function reportDeskProblem() {
       checked: "yard",
     }), deskSecrets());
     showDeskResult(text, true);
-    window.location.href = HDDesk.emailHref(text, deskSecrets());
+    openMailto(HDDesk.emailHref(text, deskSecrets()));
     toast("Opened email to Mike");
   } finally {
     state.deskBusy = false;

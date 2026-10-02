@@ -129,6 +129,7 @@ assert((html.match(/Something's wrong/g) || []).length === 2, "button is on the 
 assert(!html.includes("Reload 2026 price sheet"), "crew label Reload 2026 price sheet is gone");
 assert(html.includes("Replace book with Aug 26 sheet — deletes added rows."), "admin label warns that added rows are deleted");
 assert(html.includes('id="reload-sheet"'), "admin replace control is still the book control");
+assert(/id="reload-sheet"[^>]*\bdisabled\b/.test(html), "Aug 26 replace starts disabled for crew");
 
 if (process.exitCode) {
   console.error("Desk tests failed.");
