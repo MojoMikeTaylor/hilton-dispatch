@@ -167,6 +167,16 @@ async function pullWestCoastDiesel() {
   return obs;
 }
 
+// Google Maps key is restricted to HTTP referrers (the app's own URLs). Server-side
+// Places calls carry no browser referer, so send the request's own origin instead.
+function placesReferer(req) {
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
+  if (!host) return "";
+  const proto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim()
+    || (/^(localhost|127\.0\.0\.1)(:|$)/.test(host) ? "http" : "https");
+  return proto + "://" + host + "/";
+}
+
 function readBody(req, limit) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -245,6 +255,8 @@ const server = http.createServer(async (req, res) => {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": key,
           "X-Goog-FieldMask": "suggestions.placePrediction.placeId,suggestions.placePrediction.text",
+          // Key is HTTP-referrer restricted; server-side calls must present the app's own origin.
+          "Referer": placesReferer(req),
         },
         body: JSON.stringify({
           input,
@@ -252,11 +264,13 @@ const server = http.createServer(async (req, res) => {
           regionCode: "US",
           includedPrimaryTypes: ["street_address", "premise", "subpremise"],
           locationBias: {
-            circle: { center: { latitude: 42.35, longitude: -122.87 }, radius: 128747 },
+            // Places API (New) caps circle.radius at 50,000 m; larger values are rejected (400).
+            circle: { center: { latitude: 42.35, longitude: -122.87 }, radius: 50000 },
           },
         }),
       });
       const gJson = await gRes.json();
+      if (!gRes.ok) console.error("places autocomplete:", gRes.status, (gJson.error && gJson.error.message) || "");
       const suggestions = (gJson.suggestions || []).map((s) => {
         const p = s.placePrediction || {};
         const text = p.text && p.text.text;
@@ -264,6 +278,7 @@ const server = http.createServer(async (req, res) => {
       }).filter((s) => s.label);
       sendJson(res, 200, { suggestions });
     } catch (e) {
+      console.error("places autocomplete failed:", e.message || e);
       sendJson(res, 200, { suggestions: [] });
     }
     return;
