@@ -295,7 +295,8 @@ html.preview-mode #app { display: flex !important; }
 /* Ticket slip: payment block on the form, customer receipt sheet */
 .pay-block { border: 1px solid rgba(107,21,24,.25); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
 .pay-block .inline-check { margin-top: 6px; }
-.receipt-total { font-size: 26px; font-weight: 700; margin-top: 14px; text-align: right; border-top: 2px solid #6b1518; padding-top: 10px; }
-.worksite { font-size: 11.5px; line-height: 1.4; margin-top: 14px; padding: 10px 12px; border: 1px solid #333; border-radius: 6px; }
-.worksite .sig { margin-top: 6px; }
-.worksite .sig .line { margin-top: 28px; }
+.keeps { font-weight: 700; letter-spacing: .08em; font-size: 12px; text-transform: uppercase; border: 2px solid #6b1518; color: #6b1518; padding: 4px 10px; display: inline-block; margin-bottom: 10px; }
+.sheet.waiver { background: #fff6b3; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.waiver-text { font-size: 12.5px; line-height: 1.45; margin: 0 0 10px; }
+.sheet.waiver .sig .line { margin-top: 44px; }
+.sig.three { grid-template-columns: 1fr 1fr 1fr; }

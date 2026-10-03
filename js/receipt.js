@@ -14,9 +14,14 @@ window.HDReceipt = {
     { id: "charge", label: "Charge" },
   ],
 
-  WORKSITE:
-    "Hilton delivers to the nearest public road. Past that road, the customer accepts the risk. " +
-    "We can stop if the approach is not safe. They are responsible for damage once the truck leaves the public road.",
+  // Yellow waiver. The driver keeps it, the customer signs it. Printed word for word — do not shorten.
+  WAIVER_TITLE: "DELIVERY TO WORKSITE POLICY TERMS",
+  WAIVER: [
+    "Hilton Trucking Company d.b.a. Hilton Landscape Supply (\"Hilton's\") standard policy is to deliver materials to the nearest public roadway to the work site. If the Authorized Representative on a given project requests that Hilton's deliver materials beyond the public roadway, that Authorized Representative must do so at his own risk and must accept responsibility for any damages resulting from that request.",
+    "The Authorized Representative listed below has asked Hilton's to deliver materials to a work site in a location that goes beyond the public roadway. The Authorized Representative agrees to provide roadways or approaches permitting safe access of Hilton's trucks under their own power to the point of delivery. Hilton's reserves the right to stop delivery if such access is not provided.",
+    "Authorized Representative assumes full responsibility, and agrees to indemnify, hold harmless, and defend Hilton's from any damage or cost incurred to any person, property or equipment as a result of Hilton's equipment being placed off the public roadway. Such damage includes but is not limited to any bodily injury, any damage to the property or equipment of the owner, authorized representative, Hilton's, or any third party.",
+  ],
+  WAIVER_REQUEST: "REQUEST TO DELIVER MATERIALS TO A WORK SITE NOT SERVED BY A PUBLIC ROAD:",
 
   CLOVER_NOTE: "No card numbers on this ticket. Clover takes the money. Nothing auto-charges.",
 

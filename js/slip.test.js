@@ -56,26 +56,46 @@ run(`
 const total = run("HDEngine.money(__t.quote.total)");
 const fuel = run("HDEngine.money(__t.quote.fuelSurcharge)");
 
-// Printed packet: invoice + driver sheet + customer receipt.
+// Three prints, split: customer page, yellow waiver, house sheet.
 run("buildPrint(__t)");
 const html = els["print-root"].innerHTML;
-const sheets = html.split('<section class="sheet').length - 1;
-assert.strictEqual(sheets, 3, "three sheets: invoice, driver, customer receipt");
-assert.ok(html.includes("CUSTOMER RECEIPT"), "receipt sheet present");
-const receipt = html.slice(html.indexOf("CUSTOMER RECEIPT"));
-for (const needle of ["HD-TEST-1", "Smoke Test Customer", "1250 Biddle Rd, Medford, OR", "Topsoil", "3 yd", "Jaw Run", "2 ton", "3 yd · 2 ton", "Total " + total]) {
-  assert.ok(receipt.includes(needle), "receipt shows " + needle);
+const cut = (from, to) => html.slice(html.indexOf(from), to ? html.indexOf(to) : undefined);
+assert.strictEqual(html.split('<section class="sheet').length - 1, 3, "three sheets");
+const customer = cut('<section class="sheet customer">', '<section class="sheet waiver">');
+const waiver = cut('<section class="sheet waiver">', '<section class="sheet house">');
+const house = cut('<section class="sheet house">');
+
+// CUSTOMER KEEPS THIS: one page, prices, no route.
+assert.ok(customer.includes("CUSTOMER KEEPS THIS"));
+for (const needle of ["HD-TEST-1", "Smoke Test Customer", "1250 Biddle Rd, Medford, OR", "Topsoil", "3 yd", "Jaw Run", "2 ton", "3 yd · 2 ton",
+  "$25.00", "$12.50", "Delivery — Dump truck</td><td>" + run("HDEngine.money(__t.quote.deliveryFee)"), "Total " + total, "Credit — PAID, marked by Grace"]) {
+  assert.ok(customer.includes(needle), "customer page shows " + needle);
 }
-assert.ok(receipt.includes("Hilton delivers to the nearest public road."), "worksite line under the total");
-assert.ok(receipt.indexOf("Total " + total) < receipt.indexOf("Hilton delivers to the nearest public road."), "worksite is below the total");
-assert.ok(receipt.includes("Customer name (print)") && receipt.includes("Customer signature"), "name and signature lines");
-assert.ok(html.includes("Credit — PAID, marked by Grace"), "payment method, paid, and who marked it on the slip");
-assert.ok(html.includes("Fuel surcharge " + fuel + "<br>"), "fuel surcharge is its own line on the invoice");
-assert.notStrictEqual(fuel, "$0.00", "test ticket carries a real fuel surcharge");
-assert.ok(!html.includes("4111"), "card number never prints");
-assert.ok(html.includes("[card number removed]"), "card number is scrubbed, not silently dropped");
-// Bill-to blank when the name does not match QuickBooks.
-assert.ok(html.includes("Bill-to</strong><br>—"), "bill-to is blank with no QuickBooks match");
+const body = customer.slice(0, customer.indexOf('<div class="totals-box">'));
+for (const banned of ["Mapped one-way", " mi<", "min ·", "Billable time", "Route:", "<ol>", "Fuel surcharge", "fuel index", "Diesel week", "gate 4421", "House notes"]) {
+  assert.ok(!body.includes(banned), "customer page body must not carry: " + banned);
+}
+assert.ok(customer.includes("Fuel surcharge " + fuel + "<br>"), "fuel surcharge prints in the total column only");
+assert.ok(!customer.includes("Customer signature") && !customer.includes("Authorized Representative"), "customer page carries no waiver");
+assert.ok(customer.includes("Bill-to</strong><br>—"), "bill-to is blank with no QuickBooks match");
+assert.ok(!html.includes("4111") && html.includes("[card number removed]"), "card number never prints");
+
+// Yellow waiver: exact text, customer signs, driver keeps.
+assert.ok(waiver.includes("DRIVER KEEPS THIS") && waiver.includes("DELIVERY TO WORKSITE POLICY TERMS"));
+for (const p of run("HDReceipt.WAIVER")) assert.ok(waiver.includes(p.replace(/"/g, "&quot;").replace(/'/g, "&#39;")) || waiver.includes(p), "waiver paragraph printed in full");
+assert.ok(waiver.includes("REQUEST TO DELIVER MATERIALS TO A WORK SITE NOT SERVED BY A PUBLIC ROAD:"));
+assert.ok(waiver.includes("PROPERTY ADDRESS / Authorized Representative:</strong><br>1250 Biddle Rd, Medford, OR<br>Smoke Test Customer"));
+assert.ok(waiver.includes("Signature: Authorized Representative") && waiver.includes('class="line">Date<'), "signature and date lines");
+assert.ok(!waiver.includes("$"), "no money on the waiver");
+
+// House sheet: route, time, turns, scale weight, house notes, driver only.
+assert.ok(house.includes("DRIVER KEEPS THIS") && house.includes("HOUSE SHEET"));
+for (const needle of ["Mapped one-way", "Billable time", "Route:", "Scale weight", "House notes", "gate 4421", "Driver name (print)", "Truck #", "Driver signature / time out"]) {
+  assert.ok(house.includes(needle), "house sheet shows " + needle);
+}
+assert.ok(!house.includes("Customer received by") && !house.includes("Customer signature"), "no customer signature on the house sheet");
+
+// Bill-to only when QuickBooks matched.
 run("__t.billTo = 'QB Billing Co, PO Box 9'; buildPrint(__t)");
 assert.ok(els["print-root"].innerHTML.includes("Bill-to</strong><br>—"), "a stray bill-to still prints blank when the name did not match QuickBooks");
 run("__t.qbName = 'Smoke Test Customer'; __t.noAccount = false; buildPrint(__t)");

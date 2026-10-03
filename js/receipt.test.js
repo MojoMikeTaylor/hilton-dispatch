@@ -51,8 +51,15 @@ assert.strictEqual(R.loadSummary([]), "");
 assert.strictEqual(R.scrubCardNumbers("gate 4421, card 4111 1111 1111 1111 ok"), "gate 4421, card [card number removed] ok");
 assert.strictEqual(R.scrubCardNumbers("PO 123456 call 541-555-0100"), "PO 123456 call 541-555-0100");
 
-// Worksite line is word for word.
-assert.strictEqual(R.WORKSITE,
-  "Hilton delivers to the nearest public road. Past that road, the customer accepts the risk. We can stop if the approach is not safe. They are responsible for damage once the truck leaves the public road.");
+// Waiver prints word for word.
+assert.strictEqual(R.WAIVER_TITLE, "DELIVERY TO WORKSITE POLICY TERMS");
+assert.strictEqual(R.WAIVER.length, 3);
+assert.ok(R.WAIVER[0].startsWith("Hilton Trucking Company d.b.a. Hilton Landscape Supply (\"Hilton's\") standard policy is to deliver materials to the nearest public roadway to the work site."));
+assert.ok(R.WAIVER[0].endsWith("must accept responsibility for any damages resulting from that request."));
+assert.ok(R.WAIVER[1].startsWith("The Authorized Representative listed below has asked Hilton's"));
+assert.ok(R.WAIVER[1].endsWith("Hilton's reserves the right to stop delivery if such access is not provided."));
+assert.ok(R.WAIVER[2].startsWith("Authorized Representative assumes full responsibility, and agrees to indemnify, hold harmless, and defend Hilton's"));
+assert.ok(R.WAIVER[2].endsWith("authorized representative, Hilton's, or any third party."));
+assert.strictEqual(R.WAIVER_REQUEST, "REQUEST TO DELIVER MATERIALS TO A WORK SITE NOT SERVED BY A PUBLIC ROAD:");
 
 console.log("receipt.test.js OK");

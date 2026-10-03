@@ -1401,16 +1401,11 @@ function buildPrint(ticket) {
   const fuelRow = `<tr><td colspan="2">${esc(HDEngine.fuelSentence(q))}</td></tr>`;
   const payLine = HDReceipt.paymentLine(ticket);
   const notes = HDReceipt.scrubCardNumbers(ticket.notes || "");
-  const soldTo = ticket.cod || (ticket.noAccount && !ticket.qbName)
-    ? ticket.customer || "—"
-    : ticket.qbName || ticket.customer;
-  const receiptRows = (q.lines || []).map((l) =>
-    `<tr><td>${esc(l.name)}</td><td>${l.qty} ${esc(l.unit)}</td></tr>`
-  ).join("") || `<tr><td colspan="2">Delivery only</td></tr>`;
   const loadSummary = HDReceipt.loadSummary(q.lines);
 
   $("print-root").innerHTML = `
-    <section class="sheet">
+    <section class="sheet customer">
+      <div class="keeps">CUSTOMER KEEPS THIS</div>
       <div class="sheet-head">
         <div>
           <h1>${esc(co.name)}</h1>
@@ -1422,7 +1417,6 @@ function buildPrint(ticket) {
         <div style="text-align:right">
           <div style="font-size:22px;font-weight:700">${isQuoteStatus(ticket.status) ? "QUOTE" : "INVOICE"} ${esc(ticket.id)}</div>
           <div>${when}</div>
-          <div>Diesel week of ${esc(weekLabel)}</div>
         </div>
       </div>
       <div class="row">
@@ -1439,19 +1433,17 @@ function buildPrint(ticket) {
         </div>
       </div>
       <div class="row" style="margin-top:12px">
-        <div><strong>Deliver to (truck)</strong><br>${esc(ticket.address)}<br>Truck: ${esc(truckLine)}<br>Deliver on: ${esc(ticket.deliverOn ? ticket.deliverOn.replace("T", " ") : "—")}</div>
+        <div><strong>Delivered to</strong><br>${esc(ticket.address)}<br>Deliver on: ${esc(ticket.deliverOn ? ticket.deliverOn.replace("T", " ") : "—")}</div>
         <div></div>
       </div>
       <h3 style="margin-top:18px">Materials</h3>
-      <table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Amount</th></tr></thead><tbody>${matRows}</tbody></table>
+      <table><thead><tr><th>Item</th><th>Yards / tons</th><th>Price</th><th>Amount</th></tr></thead><tbody>${matRows}</tbody></table>
+      ${loadSummary ? `<div style="margin-top:6px"><strong>Load:</strong> ${esc(loadSummary)}</div>` : ""}
       <h3 style="margin-top:18px">Delivery</h3>
       <table>
-        <tr><td>Mapped one-way</td><td>${q.oneWayMin.toFixed(1)} min · ${(ticket.route ? ticket.route.miles : 0).toFixed(1)} mi</td></tr>
-        <tr><td>Trip</td><td>${q.tripFactor === 2 ? "Round trip" : "One way"}</td></tr>
-        <tr><td>Billable time</td><td>${q.billableHours.toFixed(2)} hr @ ${HDEngine.money(q.rate)}/hr</td></tr>
+        <tr><td>Delivery — ${esc(truckName(ticket.truck))}</td><td>${HDEngine.money(q.deliveryFee)}</td></tr>
         ${feeRow}
         ${toteRow}
-        ${fuelRow}
       </table>
       <div class="totals-box">
         Materials ${HDEngine.money(q.materialsTotal)}<br>
@@ -1464,19 +1456,33 @@ function buildPrint(ticket) {
         <strong style="font-size:22px">Total ${HDEngine.money(q.total)}</strong><br>
         <span style="font-size:13px">${esc(payLine)}</span>
       </div>
-      <div class="recon">${esc(q.formula || "")}</div>
-      <p class="muted">${esc(notes)}</p>
     </section>
-    <section class="sheet">
+    <section class="sheet waiver">
+      <div class="keeps">DRIVER KEEPS THIS — customer signs, driver keeps</div>
+      <div class="sheet-head">
+        <div><h1>${esc(HDReceipt.WAIVER_TITLE)}</h1><div>${esc(co.name)}</div></div>
+        <div style="text-align:right"><div style="font-size:22px;font-weight:700">${esc(ticket.id)}</div><div>${when}</div></div>
+      </div>
+      ${HDReceipt.WAIVER.map((p) => `<p class="waiver-text">${esc(p)}</p>`).join("")}
+      <p class="waiver-text"><strong>${esc(HDReceipt.WAIVER_REQUEST)}</strong></p>
+      <p class="waiver-text"><strong>PROPERTY ADDRESS / Authorized Representative:</strong><br>${esc(ticket.address)}<br>${esc(ticket.customer)}</p>
+      <div class="sig">
+        <div><div class="line">Signature: Authorized Representative</div></div>
+        <div><div class="line">Date</div></div>
+      </div>
+    </section>
+    <section class="sheet house">
+      <div class="keeps">DRIVER KEEPS THIS — house sheet, customer never sees it</div>
       <div class="sheet-head">
         <div>
-          <h1>DRIVER ROUTE SHEET</h1>
+          <h1>HOUSE SHEET</h1>
           <div>${esc(co.name)} · ${esc(ticket.id)}</div>
           ${quarry ? `<div><strong>Quarry direct — truckload</strong></div>` : ""}
         </div>
         <div style="text-align:right">
           <div>${when}</div>
-          <div>${truckName(ticket.truck).toUpperCase()}</div>
+          <div>${truckName(ticket.truck).toUpperCase()} · ${esc(truckLine)}</div>
+          <div>Diesel week of ${esc(weekLabel)}</div>
         </div>
       </div>
       <div class="row">
@@ -1491,44 +1497,24 @@ function buildPrint(ticket) {
       <table><thead><tr><th>Material</th><th>Qty</th></tr></thead><tbody>
         ${(ticket.materials || []).map((m) => `<tr><td>${esc(m.name)}</td><td>${m.qty} ${esc(m.unit)}</td></tr>`).join("") || "<tr><td colspan=2>See dispatcher</td></tr>"}
       </tbody></table>
-      <p><strong>Notes:</strong> ${esc(notes || "None")}</p>
+      <p><strong>Scale weight:</strong> Gross ____________ &nbsp; Tare ____________ &nbsp; Net ____________ &nbsp; Scale ticket # ____________</p>
+      <p><strong>House notes:</strong> ${esc(notes || "None")}</p>
       <p><strong>Time:</strong>
          ${q.isDump ? "Dump route buffer × " + Number(q.multiplier).toFixed(2) + " already on the ticket." : q.isForklift ? "Forklift truck — no dump buffer." : "Small truck — no dump buffer."}
          ${q.forkliftFee ? " Forklift / extra fee " + HDEngine.money(q.forkliftFee) + "." : ""}</p>
+      <table>
+        <tr><td>Mapped one-way</td><td>${q.oneWayMin.toFixed(1)} min · ${(ticket.route ? ticket.route.miles : 0).toFixed(1)} mi</td></tr>
+        <tr><td>Trip</td><td>${q.tripFactor === 2 ? "Round trip" : "One way"}</td></tr>
+        <tr><td>Billable time</td><td>${q.billableHours.toFixed(2)} hr @ ${HDEngine.money(q.rate)}/hr</td></tr>
+        ${fuelRow}
+      </table>
       <p><strong>Route:</strong> ${(ticket.route ? ticket.route.miles.toFixed(1) : "—")} miles one-way from ${esc(yard.address)}.</p>
       ${steps ? `<ol>${steps}</ol>` : `<p class="muted">Turn-by-turn prints when the OSM router is used. Google Distance Matrix still bills time/miles.</p>`}
-      <div class="recon">${esc(String(q.formula || "").split("\n").filter((line) => !/tote/i.test(line)).join("\n"))}</div>
-      <div class="sig">
+      <div class="recon">${esc(q.formula || "")}</div>
+      <div class="sig three">
+        <div><div class="line">Driver name (print)</div></div>
+        <div><div class="line">Truck #</div></div>
         <div><div class="line">Driver signature / time out</div></div>
-        <div><div class="line">Customer received by / time in</div></div>
-      </div>
-    </section>
-    <section class="sheet receipt">
-      <div class="sheet-head">
-        <div>
-          <h1>CUSTOMER RECEIPT</h1>
-          <div>${esc(co.name)} · ${esc(co.phone)}</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:22px;font-weight:700">${esc(ticket.id)}</div>
-          <div>${when}</div>
-        </div>
-      </div>
-      <div class="row">
-        <div><strong>Name</strong><br>${esc(soldTo)}</div>
-        <div><strong>Delivered to</strong><br>${esc(ticket.address)}</div>
-      </div>
-      <h3 style="margin-top:14px">Material</h3>
-      <table><thead><tr><th>Material</th><th>Yards / tons</th></tr></thead><tbody>${receiptRows}</tbody></table>
-      ${loadSummary ? `<div style="margin-top:6px"><strong>Load:</strong> ${esc(loadSummary)}</div>` : ""}
-      <div class="receipt-total">Total ${HDEngine.money(q.total)}</div>
-      <div style="text-align:right;margin-top:4px">${esc(payLine)}</div>
-      <div class="worksite">
-        ${esc(HDReceipt.WORKSITE)}
-        <div class="sig">
-          <div><div class="line">Customer name (print)</div></div>
-          <div><div class="line">Customer signature</div></div>
-        </div>
       </div>
     </section>`;
 }
