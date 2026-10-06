@@ -15,6 +15,10 @@ const state = {
   filter: "",
   persistTimer: null,
   serverReady: false,
+  // The crew PIN / admin password the server accepted this session. Memory only; sent as
+  // headers on /api/store. The server never sends them back to the browser.
+  pin: "",
+  adminPassword: "",
   managedCredentials: { pin: false, adminPassword: false },
   book: "store",
   catalogBook: "store",
@@ -179,12 +183,36 @@ function seedStore() {
   return { settings: JSON.parse(JSON.stringify(HD_DEFAULTS)), jobs: [], customers: [] };
 }
 
+function authHeaders(extra) {
+  const h = Object.assign({}, extra || {});
+  if (state.pin) h["X-Crew-Pin"] = state.pin;
+  if (state.adminPassword) h["X-Admin-Password"] = state.adminPassword;
+  return h;
+}
+
+// Ask the server to check a PIN or admin password. Resolves "ok" | "wrong" | "none" | "offline".
+async function serverLogin(body) {
+  try {
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) return "ok";
+    if (res.status === 409) return "none";
+    if (res.status === 429) return "throttled";
+    return "wrong";
+  } catch (e) {
+    return "offline";
+  }
+}
+
 async function putStore(data) {
   cacheLocal(data);
   try {
     const res = await fetch("/api/store", {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ settings: data.settings, jobs: data.jobs, customers: data.customers || [] }),
     });
     if (res.ok) state.serverReady = true;
@@ -206,7 +234,14 @@ function saveStore(data, immediate) {
 async function bootStore() {
   const local = readLocal();
   try {
-    const res = await fetch("/api/store");
+    const res = await fetch("/api/store", { headers: authHeaders() });
+    if (res.status === 401) {
+      state.serverReady = false;
+      toast("Server wants the PIN again — log out and back in");
+      db = normalizeStore(local || seedStore());
+      db.savedAt = (local && local.savedAt) || null;
+      return;
+    }
     if (res.ok) {
       const payload = await res.json();
       const empty = payload.seeded || !payload.settings || (!(payload.jobs || []).length && !(payload.settings && payload.settings.materials && payload.settings.materials.length));
@@ -557,20 +592,31 @@ function closeAdminLock() {
   $("admin-pass").value = "";
 }
 
-function attemptAdmin() {
+async function attemptAdmin() {
   const typed = ($("admin-pass").value || "").trim();
-  const want = String((db.settings.security && db.settings.security.adminPassword) || "").trim();
-  if (!want) {
+  if (!typed) {
+    toast("Admin password required");
+    $("admin-pass").focus();
+    return;
+  }
+  let verdict = await serverLogin({ adminPassword: typed });
+  if (verdict === "offline") {
+    // Static host / server down: fall back to the locally cached copy, if it has one.
+    const want = String((db.settings.security && db.settings.security.adminPassword) || "").trim();
+    verdict = !want ? "none" : (typed === want ? "ok" : "wrong");
+  }
+  if (verdict === "none") {
     toast("No admin password is set — set ADMIN_PASSWORD on the server");
     return;
   }
-  if (typed && typed === want) {
+  if (verdict === "ok") {
     state.admin = true;
+    state.adminPassword = typed;
     syncAdminBookTools();
     closeAdminLock();
     show("settings");
   } else {
-    toast("Admin password required");
+    toast(verdict === "throttled" ? "Too many tries — wait a minute" : "Admin password required");
     $("admin-pass").value = "";
     $("admin-pass").focus();
   }
@@ -579,6 +625,8 @@ function attemptAdmin() {
 function lock() {
   state.session = false;
   state.admin = false;
+  state.pin = "";
+  state.adminPassword = "";
   syncAdminBookTools();
   closeAdminLock();
   $("app").classList.add("hidden");
@@ -599,21 +647,40 @@ function pinValue() {
   return Array.from(document.querySelectorAll(".pin-digit")).map((i) => i.value).join("");
 }
 
-function attemptLogin() {
+async function attemptLogin() {
   const pin = pinValue();
-  const want = String((db.settings.security && db.settings.security.pin) || "").trim();
-  if (!want) {
-    toast("No crew PIN is set on this server — set CREW_PIN and restart");
-    document.querySelectorAll(".pin-digit").forEach((i) => i.value = "");
-    return;
+  if (!pin || state.loginBusy) return;
+  state.loginBusy = true;
+  try {
+    let verdict = await serverLogin({ pin });
+    if (verdict === "offline") {
+      const want = String((db.settings.security && db.settings.security.pin) || "").trim();
+      verdict = !want ? "none" : (pin === want ? "ok" : "wrong");
+    }
+    if (verdict === "none") {
+      toast("No crew PIN is set on this server — set CREW_PIN and restart");
+      document.querySelectorAll(".pin-digit").forEach((i) => i.value = "");
+      return;
+    }
+    if (verdict === "ok") {
+      state.pin = pin;
+      await syncAfterLogin();
+      unlock();
+    } else {
+      toast(verdict === "throttled" ? "Too many tries — wait a minute" : "Wrong PIN");
+      document.querySelectorAll(".pin-digit").forEach((i) => i.value = "");
+      document.querySelector(".pin-digit").focus();
+    }
+  } finally {
+    state.loginBusy = false;
   }
-  if (pin && pin === want) {
-    unlock();
-  } else {
-    toast("Wrong PIN");
-    document.querySelectorAll(".pin-digit").forEach((i) => i.value = "");
-    document.querySelector(".pin-digit").focus();
-  }
+}
+
+// The store needs the PIN now, so the server sync runs after login, not at page load.
+async function syncAfterLogin() {
+  await bootStore();
+  await ensureCustomers();
+  await applyEnvGoogleKey();
 }
 
 function bindPin() {
@@ -1279,8 +1346,9 @@ function saveSettings() {
       s.security.pin = nextPin;
     }
   }
+  let nextAdmin = "";
   if (!managed.adminPassword) {
-    const nextAdmin = $("s-admin").value.trim();
+    nextAdmin = $("s-admin").value.trim();
     if (nextAdmin) s.security.adminPassword = nextAdmin;
   }
   s.maps.googleKey = $("s-gkey").value.trim();
@@ -1290,6 +1358,9 @@ function saveSettings() {
     if (s.yards[i]) s.yards[i][k] = inp.value;
   });
   saveStore(db, true);
+  // The write above was authorized with the old credentials; later writes need the new ones.
+  if (pinChanged) state.pin = s.security.pin;
+  if (nextAdmin) state.adminPassword = nextAdmin;
   toast(pinChanged ? "PIN updated" : "Settings saved");
 }
 
@@ -1833,8 +1904,11 @@ async function reportDeskProblem() {
 }
 
 async function onReady() {
-  await bootStore();
-  await ensureCustomers();
+  // Before login the app runs on the device's cached copy (or defaults). The server copy
+  // loads in syncAfterLogin once the PIN is accepted.
+  const local = readLocal();
+  db = normalizeStore(local || seedStore());
+  db.savedAt = (local && local.savedAt) || null;
   await applyEnvGoogleKey();
   bindPin();
   $("login-btn").addEventListener("click", attemptLogin);

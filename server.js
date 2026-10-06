@@ -2,9 +2,10 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const ROOT = __dirname;
-const PORT = Number(process.env.PORT) || 8756;
+const PORT = process.env.PORT === undefined || process.env.PORT === "" ? 8756 : Number(process.env.PORT); // PORT=0 = pick a free port (tests)
 
 function resolveStorePath() {
   if (process.env.DATA_DIR) return path.join(process.env.DATA_DIR, "store.json");
@@ -39,11 +40,74 @@ function envSecurity() {
   return out;
 }
 
-function applyEnvSecurity(settings) {
+/* Credentials the server checks against: env first, store.json settings.security as the fallback.
+   They are never sent to the browser; the browser proves it knows them via /api/login and the
+   X-Crew-Pin / X-Admin-Password headers on /api/store. */
+function credentials() {
   const env = envSecurity();
-  if (!settings || !Object.keys(env).length) return settings;
-  settings.security = { ...(settings.security || {}), ...env };
-  return settings;
+  let stored = {};
+  try {
+    const data = JSON.parse(fs.readFileSync(STORE, "utf8"));
+    stored = (data.settings && data.settings.security) || {};
+  } catch (e) { /* no store yet */ }
+  return {
+    pin: String(env.pin || stored.pin || "").trim(),
+    adminPassword: String(env.adminPassword || stored.adminPassword || "").trim(),
+  };
+}
+
+function safeEqual(a, b) {
+  const A = Buffer.from(String(a || ""), "utf8");
+  const B = Buffer.from(String(b || ""), "utf8");
+  if (!A.length || A.length !== B.length) return false;
+  return crypto.timingSafeEqual(A, B);
+}
+
+// Returns "crew", "admin", or "" (not allowed). With no credentials configured anywhere the
+// store is open, as it was before — that is the local-dev / first-run case only.
+function authRole(req) {
+  const creds = credentials();
+  if (!creds.pin && !creds.adminPassword) return "crew";
+  if (creds.adminPassword && safeEqual(req.headers["x-admin-password"], creds.adminPassword)) return "admin";
+  if (creds.pin && safeEqual(req.headers["x-crew-pin"], creds.pin)) return "crew";
+  return "";
+}
+
+// Brute-force brake on /api/login: 10 failures per IP per minute.
+const loginFailures = new Map();
+function loginThrottled(ip) {
+  const now = Date.now();
+  const rec = loginFailures.get(ip) || { count: 0, since: now };
+  if (now - rec.since > 60 * 1000) { rec.count = 0; rec.since = now; }
+  loginFailures.set(ip, rec);
+  return rec.count >= 10;
+}
+function noteLoginFailure(ip) {
+  const rec = loginFailures.get(ip) || { count: 0, since: Date.now() };
+  rec.count += 1;
+  loginFailures.set(ip, rec);
+}
+function clientIp(req) {
+  const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return fwd || (req.socket && req.socket.remoteAddress) || "?";
+}
+
+// What the browser receives: the store with the secrets blanked.
+function publicStore(store) {
+  if (!store || !store.settings) return store;
+  const settings = { ...store.settings };
+  settings.security = { ...(settings.security || {}), pin: "", adminPassword: "" };
+  return { ...store, settings };
+}
+
+// What goes to disk: keep the stored credentials unless the client sent new non-empty ones.
+function mergeSecurityForWrite(incoming, existing) {
+  const inc = (incoming && incoming.security) || {};
+  const ex = (existing && existing.security) || {};
+  const security = { ...ex, ...inc };
+  if (!String(inc.pin || "").trim()) security.pin = ex.pin || "";
+  if (!String(inc.adminPassword || "").trim()) security.adminPassword = ex.adminPassword || "";
+  return { ...incoming, security };
 }
 
 const MIME = {
@@ -78,7 +142,7 @@ function readStore() {
     const data = JSON.parse(raw);
     return {
       seeded: false,
-      settings: applyEnvSecurity(data.settings || null),
+      settings: data.settings || null,
       jobs: Array.isArray(data.jobs) ? data.jobs : [],
       customers: Array.isArray(data.customers) ? data.customers : [],
       savedAt: data.savedAt || null,
@@ -284,18 +348,64 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (url.split("?")[0] === "/api/login" && method === "POST") {
+    const ip = clientIp(req);
+    if (loginThrottled(ip)) {
+      sendJson(res, 429, { ok: false, error: "Too many tries. Wait a minute." });
+      return;
+    }
+    try {
+      const body = JSON.parse((await readBody(req, 4000)) || "{}");
+      const creds = credentials();
+      if (body.adminPassword !== undefined) {
+        if (!creds.adminPassword) { sendJson(res, 409, { ok: false, error: "no_admin" }); return; }
+        if (safeEqual(body.adminPassword, creds.adminPassword)) { sendJson(res, 200, { ok: true, role: "admin" }); return; }
+      } else {
+        if (!creds.pin) { sendJson(res, 409, { ok: false, error: "no_pin" }); return; }
+        if (safeEqual(body.pin, creds.pin)) { sendJson(res, 200, { ok: true, role: "crew" }); return; }
+      }
+      noteLoginFailure(ip);
+      sendJson(res, 401, { ok: false, error: "wrong" });
+    } catch (e) {
+      sendJson(res, 400, { ok: false, error: "bad request" });
+    }
+    return;
+  }
+
+  // Public, no secrets, no data: for the uptime watcher.
+  if (url.split("?")[0] === "/api/health" && method === "GET") {
+    const store = readStore();
+    let bytes = 0;
+    try { bytes = fs.statSync(STORE).size; } catch (e) { /* none */ }
+    const env = envSecurity();
+    sendJson(res, 200, {
+      ok: true,
+      seeded: !!store.seeded,
+      storeBytes: bytes,
+      customers: (store.customers || []).length,
+      jobs: (store.jobs || []).length,
+      materials: ((store.settings && store.settings.materials) || []).length,
+      savedAt: store.savedAt || null,
+      managedCredentials: { pin: !!env.pin, adminPassword: !!env.adminPassword },
+    });
+    return;
+  }
+
   if (url.split("?")[0] === "/api/store" && method === "GET") {
-    sendJson(res, 200, readStore());
+    if (!authRole(req)) { sendJson(res, 401, { ok: false, error: "pin required" }); return; }
+    sendJson(res, 200, publicStore(readStore()));
     return;
   }
 
   if (url.split("?")[0] === "/api/store" && method === "PUT") {
+    if (!authRole(req)) { sendJson(res, 401, { ok: false, error: "pin required" }); return; }
     try {
       const raw = await readBody(req, 8 * 1024 * 1024);
       const data = JSON.parse(raw);
       if (!data || typeof data !== "object") throw new Error("bad store");
+      const existing = readStore();
       const out = {
-        settings: applyEnvSecurity(data.settings || null),
+        settings: data.settings ? mergeSecurityForWrite(data.settings, existing.settings) : null,
         jobs: Array.isArray(data.jobs) ? data.jobs : [],
         customers: Array.isArray(data.customers) ? data.customers : [],
         savedAt: new Date().toISOString(),
@@ -317,7 +427,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log("Hilton Dispatch → http://0.0.0.0:" + PORT);
+  console.log("Hilton Dispatch → http://0.0.0.0:" + server.address().port);
   console.log("Store file: " + STORE);
   const env = envSecurity();
   console.log("Credentials: " + (Object.keys(env).length
