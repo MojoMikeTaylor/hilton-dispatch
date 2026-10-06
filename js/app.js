@@ -1525,7 +1525,8 @@ function buildPrint(ticket) {
         ${esc(HDEngine.fuelSentence(q))}<br>
         ${q.tax ? "Tax " + HDEngine.money(q.tax) + "<br>" : ""}
         <strong style="font-size:22px">Total ${HDEngine.money(q.total)}</strong><br>
-        <span style="font-size:13px">${esc(payLine)}</span>
+        <span style="font-size:13px">${esc(payLine)}</span><br>
+        <span style="font-size:13px">Paid at delivery ______ &nbsp; How ______ &nbsp; Driver ______</span>
       </div>
     </section>
     <section class="sheet waiver">
@@ -1587,6 +1588,7 @@ function buildPrint(ticket) {
         <div><div class="line">Truck #</div></div>
         <div><div class="line">Driver signature / time out</div></div>
       </div>
+      <p class="house-paid"><strong>Payment:</strong> ${esc(payLine)}</p>
     </section>`;
 }
 

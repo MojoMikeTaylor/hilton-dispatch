@@ -94,6 +94,10 @@ for (const needle of ["Mapped one-way", "Billable time", "Route:", "Scale weight
   assert.ok(house.includes(needle), "house sheet shows " + needle);
 }
 assert.ok(!house.includes("Customer received by") && !house.includes("Customer signature"), "no customer signature on the house sheet");
+assert.ok(house.includes("Payment:</strong> Credit — PAID, marked by Grace"), "house sheet shows the paid line under the driver block");
+assert.ok(house.indexOf("Driver signature / time out") < house.indexOf("Payment:</strong>"), "paid line sits under driver name / truck #");
+assert.ok(customer.includes("Paid at delivery ______"), "customer page leaves a write-in for the COD driver");
+assert.ok(!house.includes("Paid at delivery"), "write-in is on the customer page only");
 
 // Bill-to only when QuickBooks matched.
 run("__t.billTo = 'QB Billing Co, PO Box 9'; buildPrint(__t)");
@@ -118,6 +122,7 @@ assert.ok(href.includes("Customer copy: not requested"), "email says the custome
 // Unpaid, no method chosen: slip leaves a blank for the driver.
 run("__t.paid = false; __t.paidBy = ''; __t.payMethod = ''; buildPrint(__t)");
 assert.ok(els["print-root"].innerHTML.includes("Payment method: ____________ — NOT PAID"), "blank payment line when nothing picked");
+assert.ok(els["print-root"].innerHTML.slice(els["print-root"].innerHTML.indexOf('<section class="sheet house">')).includes("Payment:</strong> Payment method: ____________ — NOT PAID"), "house sheet says NOT PAID when nobody marked it");
 
 // CSV export carries payment columns.
 run("var __csv = ''; URL.createObjectURL = () => 'blob:x'; URL.revokeObjectURL = () => {}; db.jobs = [Object.assign({}, __t, { paid: true, paidBy: 'Grace', payMethod: 'cash' })];");
