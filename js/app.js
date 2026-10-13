@@ -25,6 +25,8 @@ const state = {
   boardView: "live",
   deskBusy: false,
   deskToken: 0,
+  saveInFlight: 0,
+  boardPollTimer: null,
 };
 
 function lockTicketMath(draft) {
@@ -207,28 +209,170 @@ async function serverLogin(body) {
   }
 }
 
-async function putStore(data) {
+const BOARD_POLL_MS = 20000;
+const pendingDeletedIds = new Set();
+
+function rememberDeletedIds(ids) {
+  (Array.isArray(ids) ? ids : []).forEach((id) => {
+    if (id != null && String(id) !== "") pendingDeletedIds.add(String(id));
+  });
+}
+
+// This desk's copy wins for ids it has. Tickets only the server knows about stay.
+// Ids in deletedIds are left out so a fetch cannot put a deleted ticket back.
+function mergeJobsById(remoteJobs, localJobs, deletedIds) {
+  const deleted = new Set();
+  if (Array.isArray(deletedIds)) {
+    deletedIds.forEach((id) => {
+      if (id != null && String(id) !== "") deleted.add(String(id));
+    });
+  }
+  const localById = new Map();
+  const localWithoutId = [];
+  (Array.isArray(localJobs) ? localJobs : []).forEach((job) => {
+    if (!job || typeof job !== "object") return;
+    const id = job.id == null || job.id === "" ? "" : String(job.id);
+    if (!id) localWithoutId.push(job);
+    else if (!deleted.has(id)) localById.set(id, job);
+  });
+  const merged = [];
+  const seen = new Set();
+  (Array.isArray(remoteJobs) ? remoteJobs : []).forEach((job) => {
+    if (!job || typeof job !== "object") return;
+    const id = job.id == null || job.id === "" ? "" : String(job.id);
+    if (!id) {
+      merged.push(job);
+      return;
+    }
+    if (deleted.has(id) || seen.has(id)) return;
+    seen.add(id);
+    merged.push(localById.has(id) ? localById.get(id) : job);
+  });
+  localById.forEach((job, id) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    merged.push(job);
+  });
+  localWithoutId.forEach((job) => merged.push(job));
+  return merged;
+}
+
+async function reloadJobsFromServer(data) {
+  const res = await fetch("/api/store", { headers: authHeaders() });
+  if (!res.ok) return false;
+  const remote = await res.json();
+  if (!remote || !Array.isArray(remote.jobs)) return false;
+  data.jobs = remote.jobs.map((j) => {
+    if (j && typeof j === "object") j.status = normalizeStatus(j.status);
+    return j;
+  });
   cacheLocal(data);
+  if (state.view === "board") renderBoard();
+  return true;
+}
+
+async function putStore(data, deletedIds) {
+  const ids = Array.from(new Set(
+    (Array.isArray(deletedIds) ? deletedIds : [])
+      .filter((id) => id != null && String(id) !== "")
+      .map((id) => String(id))
+  ));
+  const localJobs = Array.isArray(data.jobs) ? data.jobs.slice() : [];
+  cacheLocal(data);
+  state.saveInFlight += 1;
   try {
+    let jobs = localJobs;
+    try {
+      const got = await fetch("/api/store", { headers: authHeaders() });
+      if (got.ok) {
+        const remote = await got.json();
+        jobs = mergeJobsById(remote && remote.jobs, localJobs, ids);
+        data.jobs = jobs;
+        cacheLocal(data);
+      }
+    } catch (e) { /* server down: still try to write this desk's copy */ }
+    const body = { settings: data.settings, jobs, customers: data.customers || [] };
+    if (ids.length) body.deletedIds = ids;
     const res = await fetch("/api/store", {
       method: "PUT",
       headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ settings: data.settings, jobs: data.jobs, customers: data.customers || [] }),
+      body: JSON.stringify(body),
     });
-    if (res.ok) state.serverReady = true;
+    if (res.status === 409) {
+      state.serverReady = false;
+      ids.forEach((id) => pendingDeletedIds.delete(id));
+      toast("Save blocked — it would have erased every ticket");
+      const restored = await reloadJobsFromServer(data);
+      if (!restored) {
+        data.jobs = localJobs;
+        cacheLocal(data);
+      }
+      return;
+    }
+    if (res.ok) {
+      state.serverReady = true;
+      ids.forEach((id) => pendingDeletedIds.delete(id));
+      if (state.view === "board") {
+        try { renderBoard(); } catch (e) { console.error(e); }
+      }
+    } else {
+      state.serverReady = false;
+    }
   } catch (e) {
     state.serverReady = false;
+  } finally {
+    state.saveInFlight -= 1;
   }
 }
 
-function saveStore(data, immediate) {
+function saveStore(data, immediate, deletedIds) {
+  rememberDeletedIds(deletedIds);
   cacheLocal(data);
   clearTimeout(state.persistTimer);
   if (immediate) {
-    putStore(data);
+    putStore(data, Array.from(pendingDeletedIds));
     return;
   }
-  state.persistTimer = setTimeout(() => putStore(data), 300);
+  state.persistTimer = setTimeout(() => {
+    state.persistTimer = null;
+    putStore(data, Array.from(pendingDeletedIds));
+  }, 300);
+}
+
+function startBoardPoll() {
+  if (state.boardPollTimer) return;
+  state.boardPollTimer = setInterval(pollBoard, BOARD_POLL_MS);
+}
+
+function stopBoardPoll() {
+  if (!state.boardPollTimer) return;
+  clearInterval(state.boardPollTimer);
+  state.boardPollTimer = null;
+}
+
+let boardPollBusy = false;
+
+async function pollBoard() {
+  if (boardPollBusy || !state.session || state.view !== "board") return;
+  if (state.saveInFlight || state.persistTimer) return;
+  boardPollBusy = true;
+  try {
+    const res = await fetch("/api/store", { headers: authHeaders() });
+    if (!res.ok || !state.session || state.view !== "board" || state.saveInFlight || state.persistTimer) return;
+    const payload = await res.json();
+    if (!payload || !Array.isArray(payload.jobs)) return;
+    if (state.view !== "board" || state.saveInFlight || state.persistTimer) return;
+    const jobs = payload.jobs.map((j) => {
+      if (j && typeof j === "object") j.status = normalizeStatus(j.status);
+      return j;
+    });
+    if (JSON.stringify(jobs) === JSON.stringify(db.jobs)) return;
+    db.jobs = jobs;
+    if (payload.savedAt) db.savedAt = payload.savedAt;
+    cacheLocal(db);
+    if (state.view === "board") renderBoard();
+  } catch (e) { /* keep the tickets already on screen */ }
+  finally { boardPollBusy = false; }
 }
 
 async function bootStore() {
@@ -565,7 +709,10 @@ function show(view) {
   document.querySelectorAll(".nav button").forEach((b) => {
     b.classList.toggle("active", b.dataset.go === view);
   });
-  if (view === "board") renderBoard();
+  if (view === "board") {
+    renderBoard();
+    pollBoard();
+  }
   if (view === "new") renderForm();
   if (view === "settings") renderSettings();
   if (view === "catalog") renderCatalog();
@@ -623,6 +770,7 @@ async function attemptAdmin() {
 }
 
 function lock() {
+  stopBoardPoll();
   state.session = false;
   state.admin = false;
   state.pin = "";
@@ -640,6 +788,7 @@ function unlock() {
   state.session = true;
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");
+  startBoardPoll();
   show("board");
 }
 
@@ -1100,6 +1249,20 @@ function voidTicket() {
   show("board");
 }
 
+function isDeletableJob(job) {
+  const st = normalizeStatus(job && job.status);
+  return st === "quote" || st === "void";
+}
+
+function deleteStoredJob(id) {
+  const idx = db.jobs.findIndex((j) => j.id === id);
+  if (idx < 0) return false;
+  if (!isDeletableJob(db.jobs[idx])) return false;
+  db.jobs.splice(idx, 1);
+  saveStore(db, true, [id]);
+  return true;
+}
+
 function deleteTicket() {
   collectForm();
   const id = state.draft.id;
@@ -1111,10 +1274,13 @@ function deleteTicket() {
     toast("Cleared unsaved ticket");
     return;
   }
+  const job = db.jobs.find((j) => j.id === id);
+  if (!isDeletableJob(job || state.draft)) {
+    toast("Delete is only for a quote or a void");
+    return;
+  }
   if (!confirm("Delete " + id + " for good? Void keeps a record. Delete is for quotes and mishaps only.")) return;
-  const idx = db.jobs.findIndex((j) => j.id === id);
-  if (idx >= 0) db.jobs.splice(idx, 1);
-  saveStore(db, true);
+  if (!deleteStoredJob(id)) return;
   state.draft = blankDraft();
   state.route = null;
   state.quote = null;
@@ -2105,10 +2271,13 @@ async function onReady() {
     if (del) {
       e.stopPropagation();
       const id = del.dataset.delJob;
+      const job = db.jobs.find((j) => j.id === id);
+      if (!isDeletableJob(job)) {
+        toast("Delete is only for a quote or a void");
+        return;
+      }
       if (!confirm("Delete " + id + " for good?")) return;
-      const idx = db.jobs.findIndex((j) => j.id === id);
-      if (idx >= 0) db.jobs.splice(idx, 1);
-      saveStore(db, true);
+      if (!deleteStoredJob(id)) return;
       renderBoard();
       toast("Deleted " + id);
       return;

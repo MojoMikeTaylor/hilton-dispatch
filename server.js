@@ -100,6 +100,61 @@ function publicStore(store) {
   return { ...store, settings };
 }
 
+function jobKey(job) {
+  if (!job || typeof job !== "object") return "";
+  if (job.id == null || job.id === "") return "";
+  return String(job.id);
+}
+
+function deletedIdSet(deletedIds) {
+  const deleted = new Set();
+  if (!Array.isArray(deletedIds)) return deleted;
+  deletedIds.forEach((id) => {
+    if (id != null && String(id) !== "") deleted.add(String(id));
+  });
+  return deleted;
+}
+
+// Two desks save the whole list they have on screen. Merge by id so a stale
+// screen cannot drop a ticket it never loaded. The incoming copy wins when
+// both sides have the same id. A ticket is removed only via deletedIds.
+function mergeJobs(existingJobs, incomingJobs, deletedIds) {
+  const deleted = deletedIdSet(deletedIds);
+  const incomingById = new Map();
+  const incomingWithoutId = [];
+  (Array.isArray(incomingJobs) ? incomingJobs : []).forEach((job) => {
+    if (!job || typeof job !== "object") return;
+    const id = jobKey(job);
+    if (!id) incomingWithoutId.push(job);
+    else if (!deleted.has(id)) incomingById.set(id, job);
+  });
+  const merged = [];
+  const seen = new Set();
+  (Array.isArray(existingJobs) ? existingJobs : []).forEach((job) => {
+    if (!job || typeof job !== "object") return;
+    const id = jobKey(job);
+    if (id && (deleted.has(id) || seen.has(id))) return;
+    if (id && incomingById.has(id)) {
+      seen.add(id);
+      merged.push(incomingById.get(id));
+      return;
+    }
+    if (id) seen.add(id);
+    merged.push(job);
+  });
+  incomingById.forEach((job, id) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    merged.push(job);
+  });
+  incomingWithoutId.forEach((job) => merged.push(job));
+  return merged;
+}
+
+function countableJobs(list) {
+  return (Array.isArray(list) ? list : []).filter((job) => job && typeof job === "object");
+}
+
 // What goes to disk: keep the stored credentials unless the client sent new non-empty ones.
 function mergeSecurityForWrite(incoming, existing) {
   const inc = (incoming && incoming.security) || {};
@@ -404,9 +459,15 @@ const server = http.createServer(async (req, res) => {
       const data = JSON.parse(raw);
       if (!data || typeof data !== "object") throw new Error("bad store");
       const existing = readStore();
+      const before = countableJobs(existing.jobs);
+      const jobs = mergeJobs(existing.jobs, Array.isArray(data.jobs) ? data.jobs : [], data.deletedIds);
+      if (before.length > 0 && jobs.length === 0) {
+        sendJson(res, 409, { ok: false, error: "refusing to empty jobs" });
+        return;
+      }
       const out = {
         settings: data.settings ? mergeSecurityForWrite(data.settings, existing.settings) : null,
-        jobs: Array.isArray(data.jobs) ? data.jobs : [],
+        jobs,
         customers: Array.isArray(data.customers) ? data.customers : [],
         savedAt: new Date().toISOString(),
       };
