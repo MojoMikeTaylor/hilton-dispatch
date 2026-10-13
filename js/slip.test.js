@@ -95,6 +95,15 @@ for (const needle of ["Mapped one-way", "Billable time", "Route:", "Scale weight
 }
 assert.ok(!house.includes("Customer received by") && !house.includes("Customer signature"), "no customer signature on the house sheet");
 assert.ok(house.includes("Payment:</strong> Credit — PAID, marked by Grace"), "house sheet shows the paid line under the driver block");
+function sheetId(section) {
+  const m = section.match(/class="sheet-id"[^>]*>([^<]*)</);
+  return m ? m[1] : "";
+}
+assert.strictEqual(sheetId(customer), "INVOICE HD-TEST-1", "customer receipt prints the ticket number at the top");
+assert.strictEqual(sheetId(house), "HD-TEST-1", "house sheet prints the same ticket number at the top");
+assert.ok(sheetId(customer).includes("HD-TEST-1") && sheetId(house) === "HD-TEST-1", "both copies carry the same ticket number");
+assert.ok(house.indexOf('class="sheet-id"') < house.indexOf("Diesel week"), "house ticket number sits above the rest of the header");
+assert.ok(!waiver.includes('class="sheet-id"'), "yellow waiver is unchanged");
 assert.ok(house.indexOf("Driver signature / time out") < house.indexOf("Payment:</strong>"), "paid line sits under driver name / truck #");
 assert.ok(customer.includes("Paid at delivery ______"), "customer page leaves a write-in for the COD driver");
 assert.ok(!house.includes("Paid at delivery"), "write-in is on the customer page only");
