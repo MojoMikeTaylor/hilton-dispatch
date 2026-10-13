@@ -93,14 +93,15 @@ async function withServer(env, security, fn) {
       [true, 2, 1, 1, true], "health reports counts and managed flags");
     assert.ok(!("settings" in r.json) && !JSON.stringify(r.json).includes("2468"), "health carries no data or secrets");
 
-    // A write with the PIN lands, and the blanked security block does not wipe anything on disk.
+    // A write with the PIN lands. HD-1 was already on disk; the write adds HD-2
+    // and must not drop the ticket this request did not mention.
     r = await call(port, "PUT", "/api/store", {
       headers: { "X-Crew-Pin": "2468" },
       body: { settings: { security: { pin: "", adminPassword: "" }, materials: [] }, jobs: [{ id: "HD-2" }], customers: [] },
     });
     assert.strictEqual(r.status, 200, "store write with the PIN lands");
     const onDisk = JSON.parse(fs.readFileSync(path.join(dir, "store.json"), "utf8"));
-    assert.strictEqual(onDisk.jobs[0].id, "HD-2");
+    assert.deepStrictEqual(onDisk.jobs.map((j) => j.id), ["HD-1", "HD-2"]);
     assert.ok(!JSON.stringify(onDisk).includes("2468"), "env PIN is not copied into the store file");
 
     // Brute-force brake: 10 misses then 429.
