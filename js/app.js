@@ -158,6 +158,91 @@ function matchesBoardView(j) {
   return st !== "quote" && st !== "void" && st !== "done";
 }
 
+const WEEK_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const WEEK_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function parseLocalDay(now) {
+  const d = now instanceof Date ? now : new Date(now);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
+}
+
+function formatLocalDay(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return y + "-" + m + "-" + day;
+}
+
+function weekStartMonday(now) {
+  const day = parseLocalDay(now || new Date());
+  const dow = day.getDay();
+  let add = (8 - dow) % 7;
+  if (add === 0) add = 7;
+  day.setDate(day.getDate() + add);
+  return day;
+}
+
+function weekColumns(now) {
+  const start = weekStartMonday(now);
+  const cols = [];
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i, 12);
+    cols.push({
+      date: formatLocalDay(d),
+      weekday: WEEK_DAYS[d.getDay()],
+      label: WEEK_MONTHS[d.getMonth()] + " " + d.getDate(),
+    });
+  }
+  return cols;
+}
+
+function isWeekTicket(job) {
+  if (!job) return false;
+  const st = normalizeStatus(job.status);
+  return st !== "quote" && st !== "void";
+}
+
+function deliverDateKey(job) {
+  const m = String((job && job.deliverOn) || "").match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : "";
+}
+
+function deliverSortKey(job) {
+  const m = String((job && job.deliverOn) || "").match(/T(\d{2}:\d{2})/);
+  return m ? m[1] : "99:99";
+}
+
+function deliverClock(job) {
+  const key = deliverSortKey(job);
+  if (key === "99:99") return "—";
+  const parts = key.split(":");
+  const h = Number(parts[0]);
+  const min = parts[1];
+  const hr = h % 12 || 12;
+  return hr + ":" + min + (h < 12 ? " AM" : " PM");
+}
+
+function groupWeek(jobs, now) {
+  const cols = weekColumns(now);
+  const byDate = {};
+  cols.forEach((c) => { byDate[c.date] = []; });
+  (jobs || []).forEach((j) => {
+    if (!isWeekTicket(j)) return;
+    const key = deliverDateKey(j);
+    if (!byDate[key]) return;
+    byDate[key].push(j);
+  });
+  cols.forEach((c) => {
+    byDate[c.date].sort((a, b) => {
+      const ta = deliverSortKey(a);
+      const tb = deliverSortKey(b);
+      if (ta !== tb) return ta < tb ? -1 : 1;
+      return String(a.id || "").localeCompare(String(b.id || ""));
+    });
+  });
+  return cols.map((c) => ({ date: c.date, weekday: c.weekday, label: c.label, jobs: byDate[c.date] }));
+}
+
 function catalogNeedsPricesFrom(materials) {
   return (materials || []).some((m) => {
     if (HDCatalog.isQuarry(m) || HDCatalog.isStone(m)) return false;
@@ -870,6 +955,11 @@ function renderBoard() {
   $("kpi-open").textContent = String(open.length);
   $("kpi-total").textContent = HDEngine.money(billed);
 
+  if ((state.boardView || "live") === "week") {
+    renderWeekBoard(searched);
+    return;
+  }
+
   if (!list.length) {
     const empty = (state.boardView === "quotes")
       ? "No quotes parked. Check Quote only on a ticket when the customer is just asking for a number."
@@ -914,6 +1004,24 @@ function renderBoard() {
         }).join("")}
       </tbody>
     </table>`;
+}
+
+function renderWeekBoard(jobs) {
+  const days = groupWeek(jobs, new Date());
+  $("job-table").innerHTML = `<div class="week-grid">${days.map((day) => `
+    <section class="week-col" data-week="${escAttr(day.date)}">
+      <header class="week-head">
+        <strong>${esc(day.weekday)}</strong>
+        <span class="muted">${esc(day.label)}</span>
+      </header>
+      ${day.jobs.length ? day.jobs.map((j) => `
+        <article class="week-card" data-open="${escAttr(j.id)}">
+          <strong>${esc(j.id)}</strong>
+          <div>${esc(j.customer) || "—"}</div>
+          <div class="muted">${esc((yardById(j.yardId) || {}).name || "")}</div>
+          <div class="muted">${esc(truckName(j.truck))} · ${esc(deliverClock(j))}</div>
+        </article>`).join("") : `<div class="week-empty">No deliveries</div>`}
+    </section>`).join("")}</div>`;
 }
 
 function truckName(truck) {
@@ -1652,7 +1760,7 @@ function buildPrint(ticket) {
           ${quarry ? `<div><strong>Quarry direct — truckload</strong></div>` : ""}
         </div>
         <div style="text-align:right">
-          <div style="font-size:22px;font-weight:700">${isQuoteStatus(ticket.status) ? "QUOTE" : "INVOICE"} ${esc(ticket.id)}</div>
+          <div class="sheet-id" style="font-size:22px;font-weight:700">${isQuoteStatus(ticket.status) ? "QUOTE" : "INVOICE"} ${esc(ticket.id)}</div>
           <div>${when}</div>
         </div>
       </div>
@@ -1718,6 +1826,7 @@ function buildPrint(ticket) {
           ${quarry ? `<div><strong>Quarry direct — truckload</strong></div>` : ""}
         </div>
         <div style="text-align:right">
+          <div class="sheet-id" style="font-size:22px;font-weight:700">${esc(ticket.id)}</div>
           <div>${when}</div>
           <div>${truckName(ticket.truck).toUpperCase()} · ${esc(truckLine)}</div>
           <div>Diesel week of ${esc(weekLabel)}</div>
