@@ -23,6 +23,8 @@ const state = {
   book: "store",
   catalogBook: "store",
   boardView: "live",
+  monthCursor: null,
+  monthDay: "",
   deskBusy: false,
   deskToken: 0,
   saveInFlight: 0,
@@ -238,14 +240,66 @@ function groupWeek(jobs, now) {
     byDate[key].push(j);
   });
   cols.forEach((c) => {
-    byDate[c.date].sort((a, b) => {
-      const ta = deliverSortKey(a);
-      const tb = deliverSortKey(b);
-      if (ta !== tb) return ta < tb ? -1 : 1;
-      return String(a.id || "").localeCompare(String(b.id || ""));
-    });
+    byDate[c.date].sort(compareDeliverTime);
   });
   return cols.map((c) => ({ date: c.date, weekday: c.weekday, label: c.label, jobs: byDate[c.date] }));
+}
+
+function compareDeliverTime(a, b) {
+  const ta = deliverSortKey(a);
+  const tb = deliverSortKey(b);
+  if (ta !== tb) return ta < tb ? -1 : 1;
+  return String(a.id || "").localeCompare(String(b.id || ""));
+}
+
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const MONTH_HEADS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function shiftMonth(year, month, delta) {
+  const d = new Date(year, month + delta, 1, 12);
+  return { year: d.getFullYear(), month: d.getMonth() };
+}
+
+function monthGrid(year, month) {
+  const first = new Date(year, month, 1, 12);
+  const lead = (first.getDay() + 6) % 7;
+  const cells = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(year, month, 1 - lead + i, 12);
+    cells.push({
+      date: formatLocalDay(d),
+      day: d.getDate(),
+      inMonth: d.getMonth() === month && d.getFullYear() === year,
+      weekday: WEEK_DAYS[d.getDay()],
+    });
+  }
+  while (cells.length > 7 && cells.slice(-7).every((c) => !c.inMonth)) cells.length -= 7;
+  return cells;
+}
+
+function countLiveByDate(jobs) {
+  const counts = {};
+  (jobs || []).forEach((j) => {
+    if (!isWeekTicket(j)) return;
+    const key = deliverDateKey(j);
+    if (!key) return;
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  return counts;
+}
+
+function monthDayTickets(jobs, date) {
+  return (jobs || []).filter((j) => isWeekTicket(j) && deliverDateKey(j) === date).sort(compareDeliverTime);
+}
+
+function ensureMonthCursor() {
+  if (state.monthCursor && Number.isInteger(state.monthCursor.year) && Number.isInteger(state.monthCursor.month)) {
+    return state.monthCursor;
+  }
+  const today = parseLocalDay(new Date());
+  state.monthCursor = { year: today.getFullYear(), month: today.getMonth() };
+  if (!state.monthDay) state.monthDay = formatLocalDay(today);
+  return state.monthCursor;
 }
 
 function catalogNeedsPricesFrom(materials) {
@@ -1028,6 +1082,10 @@ function renderBoard() {
     renderWeekBoard(searched);
     return;
   }
+  if ((state.boardView || "live") === "month") {
+    renderMonthBoard(searched);
+    return;
+  }
 
   if (!list.length) {
     const empty = (state.boardView === "quotes")
@@ -1091,6 +1149,53 @@ function renderWeekBoard(jobs) {
           <div class="muted">${esc(truckName(j.truck))} · ${esc(deliverClock(j))}</div>
         </article>`).join("") : `<div class="week-empty">No deliveries</div>`}
     </section>`).join("")}</div>`;
+}
+
+function renderMonthBoard(jobs) {
+  const cursor = ensureMonthCursor();
+  const todayKey = formatLocalDay(parseLocalDay(new Date()));
+  const cells = monthGrid(cursor.year, cursor.month);
+  const counts = countLiveByDate(jobs);
+  const selected = cells.some((c) => c.date === state.monthDay) ? state.monthDay : "";
+  const tickets = selected ? monthDayTickets(jobs, selected) : [];
+  const selectedDate = selected ? parseLocalDay(selected) : null;
+  const selectedLabel = selectedDate
+    ? WEEK_DAYS[selectedDate.getDay()] + ", " + MONTH_NAMES[selectedDate.getMonth()] + " " + selectedDate.getDate()
+    : "";
+  $("job-table").innerHTML = `
+    <div class="month-board">
+      <div class="month-bar">
+        <button type="button" class="ghost" data-month-nav="prev">Prev</button>
+        <strong>${esc(MONTH_NAMES[cursor.month] + " " + cursor.year)}</strong>
+        <button type="button" class="ghost" data-month-nav="next">Next</button>
+        <button type="button" class="ghost" data-month-nav="today">Today</button>
+      </div>
+      <div class="month-grid">
+        ${MONTH_HEADS.map((name) => `<div class="month-dow">${name}</div>`).join("")}
+        ${cells.map((c) => `
+          <button type="button" class="month-day${c.inMonth ? "" : " outside"}${c.date === todayKey ? " today" : ""}${c.date === selected ? " selected" : ""}" data-month-day="${escAttr(c.date)}">
+            <span class="month-num">${c.day}</span>
+            <span class="month-count">${counts[c.date] || 0}</span>
+          </button>`).join("")}
+      </div>
+      <div class="month-list">
+        ${selected ? `<h3>${esc(selectedLabel)}</h3>` : `<p class="muted">Select a day.</p>`}
+        ${selected ? `
+          <table>
+            <thead><tr><th>Ticket</th><th>Customer</th><th>Yard</th><th>Truck</th><th>Time</th></tr></thead>
+            <tbody>
+              ${tickets.length ? tickets.map((j) => `
+                <tr class="clickable" data-open="${escAttr(j.id)}">
+                  <td><strong>${esc(j.id)}</strong></td>
+                  <td>${esc(j.customer) || "—"}</td>
+                  <td>${esc((yardById(j.yardId) || {}).name || "")}</td>
+                  <td>${esc(truckName(j.truck))}</td>
+                  <td>${esc(deliverClock(j))}</td>
+                </tr>`).join("") : `<tr><td colspan="5" class="month-empty">No deliveries</td></tr>`}
+            </tbody>
+          </table>` : ""}
+      </div>
+    </div>`;
 }
 
 function truckName(truck) {
@@ -2446,6 +2551,28 @@ async function onReady() {
     }
   });
   $("job-table").addEventListener("click", (e) => {
+    const nav = e.target.closest("[data-month-nav]");
+    if (nav) {
+      e.stopPropagation();
+      const cursor = ensureMonthCursor();
+      if (nav.dataset.monthNav === "today") {
+        const today = parseLocalDay(new Date());
+        state.monthCursor = { year: today.getFullYear(), month: today.getMonth() };
+        state.monthDay = formatLocalDay(today);
+      } else if (nav.dataset.monthNav === "prev" || nav.dataset.monthNav === "next") {
+        state.monthCursor = shiftMonth(cursor.year, cursor.month, nav.dataset.monthNav === "prev" ? -1 : 1);
+        state.monthDay = "";
+      }
+      renderBoard();
+      return;
+    }
+    const monthDay = e.target.closest("[data-month-day]");
+    if (monthDay) {
+      e.stopPropagation();
+      state.monthDay = monthDay.dataset.monthDay;
+      renderBoard();
+      return;
+    }
     const del = e.target.closest("[data-del-job]");
     if (del) {
       e.stopPropagation();
