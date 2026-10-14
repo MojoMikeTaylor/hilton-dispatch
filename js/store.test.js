@@ -183,6 +183,76 @@ function pinHeaders() {
     }
   }
 
+  // --- Two desks mint the same HD-YYYY-NNNN for different customers. ---
+  {
+    const dir = scratchDir("mint");
+    const year = new Date().getFullYear();
+    const id = (n) => "HD-" + year + "-" + String(n).padStart(4, "0");
+    const prior = [
+      { id: id(1), customer: "One", status: "new" },
+      { id: id(3), customer: "Three", status: "new" },
+    ];
+    fs.writeFileSync(path.join(dir, "store.json"), JSON.stringify({
+      settings: { security: {}, materials: [{ id: "m1", name: "Topsoil" }] },
+      jobs: prior,
+      customers: [],
+    }, null, 2));
+    const { child, port } = await startServer({ CREW_PIN: PIN }, dir);
+    try {
+      let r = await call(port, "PUT", "/api/store", {
+        headers: pinHeaders(),
+        body: {
+          settings: { security: { pin: "", adminPassword: "" }, materials: [{ id: "m1", name: "Topsoil" }] },
+          jobs: prior.concat([{ id: id(4), customer: "Alpha Yard", status: "new", notes: "desk A" }]),
+          customers: [],
+        },
+      });
+      assert.strictEqual(r.status, 200, "desk A minted " + id(4));
+      assert.strictEqual(jobById(readDisk(dir), id(4)).customer, "Alpha Yard");
+
+      r = await call(port, "PUT", "/api/store", {
+        headers: pinHeaders(),
+        body: {
+          settings: { security: { pin: "", adminPassword: "" }, materials: [{ id: "m1", name: "Topsoil" }] },
+          jobs: prior.concat([{ id: id(4), customer: "Beta Yard", status: "new", notes: "desk B" }]),
+          customers: [],
+        },
+      });
+      assert.strictEqual(r.status, 200, "desk B save with the same number lands");
+      let disk = readDisk(dir);
+      const alpha = disk.jobs.filter((j) => j.customer === "Alpha Yard");
+      const beta = disk.jobs.filter((j) => j.customer === "Beta Yard");
+      assert.strictEqual(alpha.length, 1, "Alpha survives");
+      assert.strictEqual(beta.length, 1, "Beta survives");
+      assert.strictEqual(alpha[0].id, id(4), "the first ticket keeps the minted id");
+      assert.notStrictEqual(beta[0].id, alpha[0].id, "the second desk gets a different id");
+      assert.strictEqual(beta[0].id, id(5), "the fresh id is the next sequence, not jobs.length");
+      assert.ok(idsOf(disk).includes(id(1)) && idsOf(disk).includes(id(3)), "earlier tickets stay");
+
+      r = await call(port, "PUT", "/api/store", {
+        headers: pinHeaders(),
+        body: {
+          settings: { security: { pin: "", adminPassword: "" }, materials: [{ id: "m1", name: "Topsoil" }] },
+          jobs: [
+            { id: id(1), customer: "One", status: "new" },
+            { id: id(3), customer: "Three", status: "new" },
+            { id: id(4), customer: "Alpha Yard", status: "new", notes: "revised" },
+            { id: beta[0].id, customer: "Beta Yard", status: "new", notes: "desk B" },
+          ],
+          customers: [],
+        },
+      });
+      assert.strictEqual(r.status, 200);
+      disk = readDisk(dir);
+      assert.strictEqual(disk.jobs.filter((j) => j.customer === "Alpha Yard").length, 1, "same customer still updates in place");
+      assert.strictEqual(jobById(disk, id(4)).notes, "revised");
+      assert.strictEqual(disk.jobs.filter((j) => j.id === id(4)).length, 1);
+      console.log("ok — two desks minting the same number keep both tickets");
+    } finally {
+      child.kill();
+    }
+  }
+
   // --- Browser save path: merge before PUT, poll the board, delete only quote/void. ---
   {
     const dir = scratchDir("client");
@@ -261,6 +331,34 @@ function pinHeaders() {
       assert.strictEqual(merged.find((j) => j.id === "HD-HAWK").customer, "Harry Hawk");
       assert.ok(merged.some((j) => j.id === "HD-B"));
       assert.ok(!merged.some((j) => j.id === "HD-GONE"));
+
+      const year = new Date().getFullYear();
+      const minted = run(`
+        db.jobs = [
+          { id: "HD-${year}-0002", customer: "A" },
+          { id: "HD-${year}-0010", customer: "B" },
+          { id: "HD-${year - 1}-0099", customer: "Last year" },
+          { id: "HD-OLD", customer: "Existing" }
+        ];
+        nextTicket();
+      `);
+      assert.strictEqual(minted, "HD-" + year + "-0011", "next number is the highest sequence, not jobs.length");
+      const clash = JSON.parse(run(`JSON.stringify(mergeJobsById(
+        [{ id: "HD-${year}-0004", customer: "Alpha Yard", status: "new" }],
+        [{ id: "HD-${year}-0004", customer: "Beta Yard", status: "new" }],
+        []
+      ))`));
+      assert.strictEqual(clash.length, 2);
+      assert.strictEqual(clash.find((j) => j.customer === "Alpha Yard").id, "HD-" + year + "-0004");
+      assert.strictEqual(clash.find((j) => j.customer === "Beta Yard").id, "HD-" + year + "-0005");
+      const same = JSON.parse(run(`JSON.stringify(mergeJobsById(
+        [{ id: "HD-${year}-0004", customer: "Alpha Yard", notes: "server" }],
+        [{ id: "HD-${year}-0004", customer: "Alpha Yard", notes: "this desk" }],
+        []
+      ))`));
+      assert.strictEqual(same.length, 1);
+      assert.strictEqual(same[0].id, "HD-" + year + "-0004");
+      assert.strictEqual(same[0].notes, "this desk");
 
       run(`
         state.pin = ${JSON.stringify(PIN)};
