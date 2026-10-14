@@ -67,6 +67,17 @@ const house = cut('<section class="sheet house">');
 
 // CUSTOMER KEEPS THIS: one page, prices, no route.
 assert.ok(customer.includes("CUSTOMER KEEPS THIS"));
+assert.ok(customer.includes('<img class="receipt-logo" src="img/hilton-logo.png"'), "customer receipt prints the Hilton logo");
+assert.ok(customer.indexOf("hilton-logo.png") < customer.indexOf("<h1>"), "logo sits above the company name");
+assert.ok(!customer.includes("background-image"), "logo is an img, not a print-dropped background");
+assert.ok(!waiver.includes("hilton-logo") && !house.includes("hilton-logo"), "logo is only on the customer receipt");
+const crypto = require("crypto");
+const logoBytes = fs.readFileSync(path.join(__dirname, "../img/hilton-logo.png"));
+assert.strictEqual(crypto.createHash("sha256").update(logoBytes).digest("hex"), "7800e301f46f192e82ab55da507ff63f0d3a4d25b46050814f3645c1d2080178", "logo file is the official mark, unaltered");
+const printCss = fs.readFileSync(path.join(__dirname, "../css/app.css"), "utf8").split("@media print")[1];
+assert.ok(/\.sheet\.customer,\s*\n\s*\.sheet\.customer table \{ font-size: 13\.5px; \}/.test(printCss), "customer receipt prints at 13.5px");
+assert.ok(/\.sheet \{ padding: 0; font-size: 11\.5px;/.test(printCss), "house sheet and waiver stay at 11.5px");
+assert.ok(!/\.sheet\.house[^{]*font-size:\s*13\.5px/.test(printCss) && !/\.sheet\.waiver[^{]*font-size:\s*13\.5px/.test(printCss), "13.5px is not applied to the house sheet or waiver");
 for (const needle of ["HD-TEST-1", "Smoke Test Customer", "1250 Biddle Rd, Medford, OR", "Topsoil", "3 yd", "Jaw Run", "2 ton", "3 yd · 2 ton",
   "$25.00", "$12.50", "Delivery — Dump truck</td><td>" + run("HDEngine.money(__t.quote.deliveryFee)"), "Total " + total, "Credit — PAID, marked by Grace"]) {
   assert.ok(customer.includes(needle), "customer page shows " + needle);

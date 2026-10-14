@@ -1753,6 +1753,7 @@ function buildPrint(ticket) {
       <div class="keeps">CUSTOMER KEEPS THIS</div>
       <div class="sheet-head">
         <div>
+          <div class="receipt-logo-frame"><img class="receipt-logo" src="img/hilton-logo.png" alt="Hilton Landscape Supply"></div>
           <h1>${esc(co.name)}</h1>
           <div>${esc(co.tagline || "")}</div>
           <div>${esc(co.phone)} · ${esc(co.email)}</div>
