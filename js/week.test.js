@@ -44,29 +44,28 @@ function weekdays(nowExpr) {
   return json("weekColumns(" + nowExpr + ").map(function (d) { return d.weekday; })");
 }
 
-// Tuesday 13 Oct 2026 → the following Monday 19 Oct through Saturday 24 Oct.
-assert.deepStrictEqual(dates("new Date(2026, 9, 13, 12)"), [
-  "2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24",
-]);
-assert.deepStrictEqual(weekdays("new Date(2026, 9, 13, 12)"), [
+const thisWeek = ["2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17"];
+const nextWeek = ["2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23", "2026-10-24"];
+
+// Monday, Wednesday, and Saturday open the Monday of the week that contains today.
+assert.deepStrictEqual(dates("new Date(2026, 9, 12, 8)"), thisWeek);
+assert.deepStrictEqual(dates("new Date(2026, 9, 14, 15)"), thisWeek);
+assert.deepStrictEqual(dates("new Date(2026, 9, 17, 20)"), thisWeek);
+assert.deepStrictEqual(weekdays("new Date(2026, 9, 14, 15)"), [
   "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
 ]);
 
-// Monday has already started, so the tab jumps to the next Monday.
-assert.deepStrictEqual(dates("new Date(2026, 9, 19, 8)"), [
-  "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31",
-]);
-
 // Sunday is never a column. A Sunday clock rolls forward one day, not back a week.
-assert.deepStrictEqual(dates("new Date(2026, 9, 18, 15)")[0], "2026-10-19");
-assert.ok(!dates("new Date(2026, 9, 18, 15)").includes("2026-10-18"));
-assert.notStrictEqual(dates("new Date(2026, 9, 18, 15)")[0], "2026-10-12");
+assert.deepStrictEqual(dates("new Date(2026, 9, 18, 11)"), nextWeek);
+assert.ok(!dates("new Date(2026, 9, 18, 11)").includes("2026-10-18"));
+assert.notStrictEqual(dates("new Date(2026, 9, 18, 11)")[0], "2026-10-12");
 
-// Saturday still shows the coming Monday, not the Monday that already passed.
-assert.strictEqual(dates("new Date(2026, 9, 17, 12)")[0], "2026-10-19");
-assert.deepStrictEqual(dates("new Date(2026, 9, 24, 12)"), [
-  "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31",
-]);
+// A date-only string is that local day, not UTC midnight.
+assert.strictEqual(dates("'2026-10-14'")[0], "2026-10-12");
+
+// Prev/Next move exactly one week from the Monday on screen.
+assert.strictEqual(run("formatLocalDay(weekStartMonday(new Date(2026, 9, 12 + 7, 12)))"), "2026-10-19");
+assert.strictEqual(run("formatLocalDay(weekStartMonday(new Date(2026, 9, 12 - 7, 12)))"), "2026-10-05");
 
 const grouped = json(`groupWeek([
   { id: "LATE", status: "new", customer: "Later Co", yardId: "medford", truck: "small", deliverOn: "2026-10-20T15:00" },
@@ -79,7 +78,7 @@ const grouped = json(`groupWeek([
   { id: "SUN", status: "new", customer: "Sunday Co", yardId: "cp", truck: "dump", deliverOn: "2026-10-18T09:00" },
   { id: "SUN2", status: "new", customer: "Next Sunday", yardId: "medford", truck: "small", deliverOn: "2026-10-25T09:00" },
   { id: "NODATE", status: "new", customer: "No Date", yardId: "cp", truck: "dump", deliverOn: "", createdAt: "2026-10-20T08:00" }
-], new Date(2026, 9, 13, 12)).map(function (d) { return { date: d.date, ids: d.jobs.map(function (j) { return j.id; }), yards: d.jobs.map(function (j) { return j.yardId; }) }; })`);
+], new Date(2026, 9, 21, 12)).map(function (d) { return { date: d.date, ids: d.jobs.map(function (j) { return j.id; }), yards: d.jobs.map(function (j) { return j.yardId; }) }; })`);
 
 assert.strictEqual(grouped.length, 6, "six columns");
 assert.deepStrictEqual(grouped[0], { date: "2026-10-19", ids: [], yards: [] });
@@ -92,16 +91,14 @@ for (const dropped of ["QUOTE", "VOID", "SUN", "SUN2", "NODATE"]) {
   assert.ok(!shown.includes(dropped), dropped + " is not a week card");
 }
 
-// On Monday itself, a ticket dated that Monday is outside the displayed week.
+// Monday itself is the first column, so a ticket that day is still on the board.
 const boundary = json(`groupWeek([
   { id: "THIS-MON", status: "new", customer: "This Monday", yardId: "cp", truck: "dump", deliverOn: "2026-10-19T10:00" },
   { id: "NEXT-MON", status: "new", customer: "Next Monday", yardId: "medford", truck: "small", deliverOn: "2026-10-26T07:45" }
 ], new Date(2026, 9, 19, 9)).map(function (d) { return { date: d.date, ids: d.jobs.map(function (j) { return j.id; }) }; })`);
-assert.deepStrictEqual(boundary.map((d) => d.date), [
-  "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31",
-]);
-assert.deepStrictEqual(boundary[0].ids, ["NEXT-MON"]);
-assert.ok(!boundary.some((d) => d.ids.includes("THIS-MON")), "the Monday that just started is not a column");
+assert.deepStrictEqual(boundary.map((d) => d.date), nextWeek);
+assert.deepStrictEqual(boundary[0].ids, ["THIS-MON"]);
+assert.ok(!boundary.some((d) => d.ids.includes("NEXT-MON")), "next week stays off this Monday's board");
 
 assert.strictEqual(run('deliverClock({ deliverOn: "2026-10-20T08:15" })'), "8:15 AM");
 assert.strictEqual(run('deliverClock({ deliverOn: "2026-10-20T15:00" })'), "3:00 PM");
@@ -119,11 +116,11 @@ run(`
 `);
 const realNow = Date;
 ctx.Date = function DateStub() {
-  if (arguments.length === 0) return new realNow(2026, 9, 13, 12);
+  if (arguments.length === 0) return new realNow(2026, 9, 21, 12);
   return new realNow(...arguments);
 };
 ctx.Date.prototype = realNow.prototype;
-ctx.Date.now = () => new realNow(2026, 9, 13, 12).getTime();
+ctx.Date.now = () => new realNow(2026, 9, 21, 12).getTime();
 ctx.Date.parse = realNow.parse;
 ctx.Date.UTC = realNow.UTC;
 run("renderBoard()");

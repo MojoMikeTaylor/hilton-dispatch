@@ -162,7 +162,12 @@ const WEEK_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frid
 const WEEK_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function parseLocalDay(now) {
-  const d = now instanceof Date ? now : new Date(now);
+  if (now instanceof Date) {
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
+  }
+  const iso = String(now == null ? "" : now).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]), 12, 0, 0, 0);
+  const d = now ? new Date(now) : new Date();
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0);
 }
 
@@ -176,9 +181,9 @@ function formatLocalDay(d) {
 function weekStartMonday(now) {
   const day = parseLocalDay(now || new Date());
   const dow = day.getDay();
-  let add = (8 - dow) % 7;
-  if (add === 0) add = 7;
-  day.setDate(day.getDate() + add);
+  // Mon–Sat stay in the Monday of that week. Sunday rolls forward one day.
+  const shift = dow === 0 ? 1 : 1 - dow;
+  day.setDate(day.getDate() + shift);
   return day;
 }
 
@@ -303,7 +308,8 @@ function rememberDeletedIds(ids) {
   });
 }
 
-// This desk's copy wins for ids it has. Tickets only the server knows about stay.
+// This desk's copy wins for ids it has when the customer is the same.
+// A different customer on an existing id keeps the server ticket and takes a new id.
 // Ids in deletedIds are left out so a fetch cannot put a deleted ticket back.
 function mergeJobsById(remoteJobs, localJobs, deletedIds) {
   const deleted = new Set();
@@ -312,17 +318,42 @@ function mergeJobsById(remoteJobs, localJobs, deletedIds) {
       if (id != null && String(id) !== "") deleted.add(String(id));
     });
   }
-  const localById = new Map();
-  const localWithoutId = [];
-  (Array.isArray(localJobs) ? localJobs : []).forEach((job) => {
+  const remoteList = Array.isArray(remoteJobs) ? remoteJobs : [];
+  const localList = Array.isArray(localJobs) ? localJobs : [];
+  const seqByYear = new Map();
+  remoteList.forEach((job) => noteClientSeq(seqByYear, job && job.id));
+  localList.forEach((job) => noteClientSeq(seqByYear, job && job.id));
+  const remoteById = new Map();
+  remoteList.forEach((job) => {
     if (!job || typeof job !== "object") return;
     const id = job.id == null || job.id === "" ? "" : String(job.id);
-    if (!id) localWithoutId.push(job);
-    else if (!deleted.has(id)) localById.set(id, job);
+    if (id && !remoteById.has(id)) remoteById.set(id, job);
+  });
+  const localById = new Map();
+  const localWithoutId = [];
+  const renamed = [];
+  localList.forEach((job) => {
+    if (!job || typeof job !== "object") return;
+    const id = job.id == null || job.id === "" ? "" : String(job.id);
+    if (!id) { localWithoutId.push(job); return; }
+    if (deleted.has(id)) return;
+    const stored = remoteById.get(id);
+    if (stored && customerKey(stored) !== customerKey(job)) {
+      const parsed = ticketSeq(id);
+      const copy = Object.assign({}, job, {
+        id: freshClientId(seqByYear, parsed ? parsed.year : new Date().getFullYear()),
+      });
+      if (state.draft && String(state.draft.id) === id && customerKey(state.draft) === customerKey(job)) {
+        state.draft.id = copy.id;
+      }
+      renamed.push(copy);
+      return;
+    }
+    localById.set(id, job);
   });
   const merged = [];
   const seen = new Set();
-  (Array.isArray(remoteJobs) ? remoteJobs : []).forEach((job) => {
+  remoteList.forEach((job) => {
     if (!job || typeof job !== "object") return;
     const id = job.id == null || job.id === "" ? "" : String(job.id);
     if (!id) {
@@ -338,8 +369,28 @@ function mergeJobsById(remoteJobs, localJobs, deletedIds) {
     seen.add(id);
     merged.push(job);
   });
+  renamed.forEach((job) => {
+    const id = job.id == null || job.id === "" ? "" : String(job.id);
+    if (id && seen.has(id)) return;
+    if (id) seen.add(id);
+    merged.push(job);
+  });
   localWithoutId.forEach((job) => merged.push(job));
   return merged;
+}
+
+function noteClientSeq(seqByYear, id) {
+  const parsed = ticketSeq(id);
+  if (!parsed) return;
+  const cur = seqByYear.get(parsed.year) || 0;
+  if (parsed.seq > cur) seqByYear.set(parsed.year, parsed.seq);
+}
+
+function freshClientId(seqByYear, year) {
+  const y = year || new Date().getFullYear();
+  const next = (seqByYear.get(y) || 0) + 1;
+  seqByYear.set(y, next);
+  return "HD-" + y + "-" + String(next).padStart(4, "0");
 }
 
 async function reloadJobsFromServer(data) {
@@ -766,10 +817,28 @@ function toast(msg) {
   toast._t = setTimeout(() => { el.style.display = "none"; }, 2800);
 }
 
+function ticketSeq(id) {
+  const m = String(id || "").match(/^HD-(\d{4})-(\d+)$/);
+  if (!m) return null;
+  return { year: Number(m[1]), seq: Number(m[2]) };
+}
+
+function customerKey(job) {
+  return String((job && job.customer) || "").trim();
+}
+
+function nextTicketId(jobs, year) {
+  const y = year || new Date().getFullYear();
+  let max = 0;
+  (Array.isArray(jobs) ? jobs : []).forEach((job) => {
+    const parsed = ticketSeq(job && job.id);
+    if (parsed && parsed.year === y && parsed.seq > max) max = parsed.seq;
+  });
+  return "HD-" + y + "-" + String(max + 1).padStart(4, "0");
+}
+
 function nextTicket() {
-  const year = new Date().getFullYear();
-  const seq = String(db.jobs.length + 1).padStart(4, "0");
-  return `HD-${year}-${seq}`;
+  return nextTicketId(db.jobs);
 }
 
 function yardById(id) {

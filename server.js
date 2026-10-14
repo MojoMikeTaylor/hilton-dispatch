@@ -115,22 +115,68 @@ function deletedIdSet(deletedIds) {
   return deleted;
 }
 
+function ticketSeq(id) {
+  const m = String(id || "").match(/^HD-(\d{4})-(\d+)$/);
+  if (!m) return null;
+  return { year: Number(m[1]), seq: Number(m[2]) };
+}
+
+function customerKey(job) {
+  return String((job && job.customer) || "").trim();
+}
+
+function noteTicketSeq(seqByYear, id) {
+  const parsed = ticketSeq(id);
+  if (!parsed) return;
+  const cur = seqByYear.get(parsed.year) || 0;
+  if (parsed.seq > cur) seqByYear.set(parsed.year, parsed.seq);
+}
+
+function freshTicketId(seqByYear, year) {
+  const y = year || new Date().getFullYear();
+  const next = (seqByYear.get(y) || 0) + 1;
+  seqByYear.set(y, next);
+  return "HD-" + y + "-" + String(next).padStart(4, "0");
+}
+
 // Two desks save the whole list they have on screen. Merge by id so a stale
 // screen cannot drop a ticket it never loaded. The incoming copy wins when
-// both sides have the same id. A ticket is removed only via deletedIds.
+// both sides have the same id and the same customer. A different customer on
+// an id that already exists keeps the stored ticket and takes a new id.
+// A ticket is removed only via deletedIds.
 function mergeJobs(existingJobs, incomingJobs, deletedIds) {
   const deleted = deletedIdSet(deletedIds);
+  const existingList = Array.isArray(existingJobs) ? existingJobs : [];
+  const incomingList = Array.isArray(incomingJobs) ? incomingJobs : [];
+  const seqByYear = new Map();
+  existingList.forEach((job) => noteTicketSeq(seqByYear, jobKey(job)));
+  incomingList.forEach((job) => noteTicketSeq(seqByYear, jobKey(job)));
+  const existingById = new Map();
+  existingList.forEach((job) => {
+    const id = jobKey(job);
+    if (id && !existingById.has(id)) existingById.set(id, job);
+  });
   const incomingById = new Map();
   const incomingWithoutId = [];
-  (Array.isArray(incomingJobs) ? incomingJobs : []).forEach((job) => {
+  const renamed = [];
+  incomingList.forEach((job) => {
     if (!job || typeof job !== "object") return;
     const id = jobKey(job);
-    if (!id) incomingWithoutId.push(job);
-    else if (!deleted.has(id)) incomingById.set(id, job);
+    if (!id) { incomingWithoutId.push(job); return; }
+    if (deleted.has(id)) return;
+    const stored = existingById.get(id);
+    if (stored && customerKey(stored) !== customerKey(job)) {
+      const parsed = ticketSeq(id);
+      renamed.push(Object.assign({}, job, {
+        id: freshTicketId(seqByYear, parsed ? parsed.year : new Date().getFullYear()),
+      }));
+      return;
+    }
+    incomingById.set(id, job);
   });
   const merged = [];
   const seen = new Set();
-  (Array.isArray(existingJobs) ? existingJobs : []).forEach((job) => {
+  existingList.forEach((job) => {
     if (!job || typeof job !== "object") return;
     const id = jobKey(job);
     if (id && (deleted.has(id) || seen.has(id))) return;
@@ -145,6 +191,12 @@ function mergeJobs(existingJobs, incomingJobs, deletedIds) {
   incomingById.forEach((job, id) => {
     if (seen.has(id)) return;
     seen.add(id);
+    merged.push(job);
+  });
+  renamed.forEach((job) => {
+    const id = jobKey(job);
+    if (id && seen.has(id)) return;
+    if (id) seen.add(id);
     merged.push(job);
   });
   incomingWithoutId.forEach((job) => merged.push(job));
