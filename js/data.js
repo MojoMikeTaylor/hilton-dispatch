@@ -18,8 +18,9 @@ window.HD_DEFAULTS = {
     adminPassword: "",
   },
   billing: {
-    dumpRate: 160,
-    smallRate: 100,
+    smallRate: 90,
+    dumpRate: 150,
+    transferRate: 160,
     forkliftRate: 160,
     dumpTimeMultiplier: 1.08,
     tripMode: "roundtrip",

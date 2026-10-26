@@ -79,7 +79,7 @@ assert.ok(/\.sheet\.customer,\s*\n\s*\.sheet\.customer table \{ font-size: 13\.5
 assert.ok(/\.sheet \{ padding: 0; font-size: 11\.5px;/.test(printCss), "house sheet and waiver stay at 11.5px");
 assert.ok(!/\.sheet\.house[^{]*font-size:\s*13\.5px/.test(printCss) && !/\.sheet\.waiver[^{]*font-size:\s*13\.5px/.test(printCss), "13.5px is not applied to the house sheet or waiver");
 for (const needle of ["HD-TEST-1", "Smoke Test Customer", "1250 Biddle Rd, Medford, OR", "Topsoil", "3 yd", "Jaw Run", "2 ton", "3 yd · 2 ton",
-  "$25.00", "$12.50", "Delivery — Dump truck</td><td>" + run("HDEngine.money(__t.quote.deliveryFee)"), "Total " + total, "Credit — PAID, marked by Grace"]) {
+  "$25.00", "$12.50", "Delivery — Dump</td><td>" + run("HDEngine.money(__t.quote.deliveryFee)"), "Total " + total, "Credit — PAID, marked by Grace"]) {
   assert.ok(customer.includes(needle), "customer page shows " + needle);
 }
 const body = customer.slice(0, customer.indexOf('<div class="totals-box">'));
@@ -148,5 +148,77 @@ assert.ok(els["print-root"].innerHTML.slice(els["print-root"].innerHTML.indexOf(
 run("var __csv = ''; URL.createObjectURL = () => 'blob:x'; URL.revokeObjectURL = () => {}; db.jobs = [Object.assign({}, __t, { paid: true, paidBy: 'Grace', payMethod: 'cash' })];");
 const csvHead = run("typeof exportCsv === 'function' ? 'has' : 'none'");
 assert.strictEqual(csvHead, "has");
+
+// More than one load: one dispatch line per load, same ticket, on the customer page and the house sheet.
+run(`
+  var __multi = HDEngine.quote({
+    truck: "dump",
+    oneWaySeconds: 30 * 60,
+    yardId: "willow",
+    billing: db.settings.billing,
+    materials: [{ id: "q-jaw-run", name: "Jaw Run", qty: 30, unit: "ton", price: 12.5, book: "willow", source: "quarry", truckload_only: true }],
+    forkliftFee: 0,
+    toteFee: 0
+  });
+  var __mt = { id: "HD-MULTI", createdAt: new Date().toISOString(), customer: "Multi Load", address: "1 Rock Rd",
+    yardId: "willow", truck: "dump", status: "new", materials: __multi.lines, quote: __multi, route: null };
+  buildPrint(__mt);
+`);
+const multiHtml = els["print-root"].innerHTML;
+const multiCustomer = multiHtml.slice(multiHtml.indexOf('<section class="sheet customer">'), multiHtml.indexOf('<section class="sheet waiver">'));
+const multiHouse = multiHtml.slice(multiHtml.indexOf('<section class="sheet house">'));
+assert.strictEqual((multiCustomer.match(/class="dispatch-line"/g) || []).length, 2, "customer page prints one dispatch line per load");
+assert.strictEqual((multiHouse.match(/class="dispatch-line"/g) || []).length, 4, "house sheet repeats a dispatch line per load and a billable line per load");
+assert.ok(multiCustomer.includes('data-ticket="HD-MULTI"') && multiHouse.includes('data-ticket="HD-MULTI"'), "dispatch lines stay under the same ticket");
+assert.ok(multiHouse.includes("2 loads · 1 transfer + 1 bobtail"), "house sheet shows the load count and the split");
+assert.ok(multiCustomer.includes("Dispatch — Transfer Truck") && multiCustomer.includes("Dispatch — Small Truck 550"), "dispatch lines name the trucks in the split");
+assert.ok(!multiCustomer.includes("Delivery — Dump"), "a multi-load invoice does not collapse the trucks into one delivery row");
+const multiFees = run("HDEngine.money(__multi.loads[0].deliveryFee)") + " " + run("HDEngine.money(__multi.loads[1].deliveryFee)");
+assert.ok(multiCustomer.includes(run("HDEngine.money(__multi.loads[0].deliveryFee)")) && multiCustomer.includes(run("HDEngine.money(__multi.loads[1].deliveryFee)")), "each dispatch line shows its own fee (" + multiFees + ")");
+assert.ok(multiCustomer.includes("Total " + run("HDEngine.money(__multi.total)")), "one invoice total is the summed ticket");
+
+// South Stage $40 is inside the forklift delivery fee, not its own row. cp does not get it.
+run(`
+  var __stage = HDEngine.quote({ truck: "forklift", yardId: "medford", oneWaySeconds: 30 * 60, billing: db.settings.billing, materials: [], forkliftFee: 0, toteFee: 0 });
+  var __plain = HDEngine.quote({ truck: "forklift", yardId: "cp", oneWaySeconds: 30 * 60, billing: db.settings.billing, materials: [], forkliftFee: 0, toteFee: 0 });
+  buildPrint({ id: "HD-STAGE", createdAt: new Date().toISOString(), customer: "Stage", address: "5 South Stage", yardId: "medford", truck: "forklift", status: "new", quote: __stage, materials: [] });
+`);
+const stageHtml = els["print-root"].innerHTML;
+const stageCustomer = stageHtml.slice(stageHtml.indexOf('<section class="sheet customer">'), stageHtml.indexOf('<section class="sheet waiver">'));
+assert.ok(stageCustomer.includes("Delivery — Forklift</td><td>" + run("HDEngine.money(__stage.deliveryFee)")), "medford forklift delivery row includes the adder");
+assert.ok(!stageCustomer.includes("<td>South Stage"), "South Stage is not a separate line item");
+assert.ok(run("__stage.deliveryFee - __plain.deliveryFee") === 40, "cp forklift delivery is $40 less than medford");
+
+// Duplicate quote warning shows the higher total and does not block the save.
+let duplicateConfirms = 0;
+ctx.confirm = () => { duplicateConfirms += 1; return false; };
+run(`
+  db.jobs = [
+    { id: "Q-LOW", status: "quote", customer: "Ada Lovelace", address: "1 Oak St", phone: "111", quote: { total: 400 } },
+    { id: "Q-HIGH", status: "quote", customer: "Other Co", address: "9 Pine St", phone: "", quote: { total: 900 } },
+    { id: "Q-BOOKED", status: "new", customer: "Ada Lovelace", address: "9 Pine St", phone: "5415550199", quote: { total: 5000 } }
+  ];
+  state.draft = blankDraft();
+  $("f-customer").value = "Ada Lovelace";
+  $("f-address").value = "9 Pine St";
+  $("f-phone").value = "541-555-0199";
+  $("f-quote").checked = false;
+  renderDuplicateWarning();
+`);
+const warn = els["quote-dupes"].innerHTML;
+assert.ok(warn.includes("Saving is not blocked"), "the warning says the save is not blocked");
+assert.ok(warn.includes('data-open-quote="Q-HIGH"') && warn.includes('data-open-quote="Q-LOW"'), "each match can be opened");
+assert.ok(!warn.includes("Q-BOOKED"), "a booked delivery is not a live quote");
+const highAt = warn.indexOf("Q-HIGH");
+const lowAt = warn.indexOf("Q-LOW");
+assert.ok(highAt > -1 && highAt < lowAt, "the higher total is listed first");
+assert.ok(warn.slice(warn.lastIndexOf("<div", highAt), warn.indexOf("</div>", highAt)).includes("dupe-hit"), "the higher total is highlighted");
+assert.ok(!warn.slice(warn.lastIndexOf("<div", lowAt), warn.indexOf("</div>", lowAt)).includes("dupe-hit"), "the lower total is not highlighted");
+const savedId = run(`(function () { var t = saveTicket("quote"); return t && t.id; })()`);
+assert.ok(savedId, "save still returns a ticket when a duplicate quote is on screen");
+assert.strictEqual(duplicateConfirms, 0, "the duplicate warning does not ask for confirmation");
+assert.ok(run(`db.jobs.some(function (j) { return j.id === ${JSON.stringify(savedId)} && j.customer === "Ada Lovelace" && j.status === "quote"; })`), "the new quote is stored");
+run(`openTicket("Q-HIGH")`);
+assert.strictEqual(run("state.draft.id"), "Q-HIGH", "Open loads the existing quote");
 
 console.log("slip.test.js OK");

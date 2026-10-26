@@ -118,7 +118,7 @@ function normalizeStore(data) {
     security: { ...HD_DEFAULTS.security, ...(data.settings && data.settings.security) },
     maps: { ...HD_DEFAULTS.maps, ...(data.settings && data.settings.maps) },
   };
-  if (!data.settings.billing.forkliftRate) data.settings.billing.forkliftRate = HD_DEFAULTS.billing.forkliftRate;
+  applyShippedTruckRates(data.settings.billing);
   if (!Array.isArray(data.jobs)) data.jobs = [];
   data.settings.yards = applyOfficialYards(data.settings.yards);
   const oldAcct = (data.settings.company.accountingEmail || "").toLowerCase();
@@ -135,6 +135,20 @@ function normalizeStore(data) {
   data.jobs.forEach((j) => { j.status = normalizeStatus(j.status); });
   if (!Array.isArray(data.customers)) data.customers = [];
   return data;
+}
+
+// Previous shipped defaults were dump $160 and small $100. A store that still has
+// that pair has not set its own rates, so the desk picks up Small 550 $90 and Dump $150.
+// A custom rate is left alone. Jobs and the material book are not touched.
+function applyShippedTruckRates(billing) {
+  if (!billing) return billing;
+  if (!billing.transferRate) billing.transferRate = HD_DEFAULTS.billing.transferRate;
+  if (!billing.forkliftRate) billing.forkliftRate = HD_DEFAULTS.billing.forkliftRate;
+  if (Number(billing.dumpRate) === 160 && Number(billing.smallRate) === 100) {
+    billing.dumpRate = HD_DEFAULTS.billing.dumpRate;
+    billing.smallRate = HD_DEFAULTS.billing.smallRate;
+  }
+  return billing;
 }
 
 function normalizeStatus(s) {
@@ -1122,7 +1136,7 @@ function renderBoard() {
             <td><strong>${j.id}</strong><div class="muted">${(j.createdAt || "").replace("T", " ").slice(0, 16)}</div></td>
             <td>${esc(j.customer) || "—"}${st === "quote" ? `<div class="muted">Quote</div>` : ""}${j.quarryDirect || isQuarryYard(j.yardId) ? `<div class="muted">Willow Creek — truckload</div>` : ""}<div class="muted">${esc(j.address)}</div></td>
             <td>${esc((yardById(j.yardId) || {}).name || "")}</td>
-            <td><span class="badge ${j.truck}">${truckLabel(j.truck)}</span></td>
+            <td><span class="badge ${j.truck}">${truckLabel(j.truck)}</span>${loadSplitText(j.quote) ? `<div class="muted load-split">${esc(loadSplitText(j.quote))}</div>` : ""}</td>
             <td>${esc((j.deliverOn || "").replace("T", " "))}</td>
             <td>${j.quote ? HDEngine.money(j.quote.total) : "—"}</td>
             <td><span class="badge ${st}">${esc(st)}</span></td>
@@ -1147,6 +1161,7 @@ function renderWeekBoard(jobs) {
           <div>${esc(j.customer) || "—"}</div>
           <div class="muted">${esc((yardById(j.yardId) || {}).name || "")}</div>
           <div class="muted">${esc(truckName(j.truck))} · ${esc(deliverClock(j))}</div>
+          ${loadSplitText(j.quote) ? `<div class="muted load-split">${esc(loadSplitText(j.quote))}</div>` : ""}
         </article>`).join("") : `<div class="week-empty">No deliveries</div>`}
     </section>`).join("")}</div>`;
 }
@@ -1189,7 +1204,7 @@ function renderMonthBoard(jobs) {
                   <td><strong>${esc(j.id)}</strong></td>
                   <td>${esc(j.customer) || "—"}</td>
                   <td>${esc((yardById(j.yardId) || {}).name || "")}</td>
-                  <td>${esc(truckName(j.truck))}</td>
+                  <td>${esc(truckName(j.truck))}${loadSplitText(j.quote) ? `<div class="muted load-split">${esc(loadSplitText(j.quote))}</div>` : ""}</td>
                   <td>${esc(deliverClock(j))}</td>
                 </tr>`).join("") : `<tr><td colspan="5" class="month-empty">No deliveries</td></tr>`}
             </tbody>
@@ -1199,22 +1214,58 @@ function renderMonthBoard(jobs) {
 }
 
 function truckName(truck) {
-  if (truck === "forklift") return "Forklift truck";
-  if (truck === "small") return "Small truck";
-  return "Dump truck";
+  if (truck === "forklift") return "Forklift";
+  if (truck === "transfer") return "Transfer Truck";
+  if (truck === "small") return "Small Truck 550";
+  return "Dump";
 }
 
 function truckLabel(truck) {
   const b = db.settings.billing;
-  if (truck === "forklift") return `Forklift $${b.forkliftRate || b.dumpRate}`;
-  return truck === "dump" ? `Dump $${b.dumpRate}` : `Small $${b.smallRate}`;
+  if (truck === "forklift") return `Forklift $${b.forkliftRate || 160}`;
+  if (truck === "transfer") return `Transfer $${b.transferRate || 160}`;
+  if (truck === "small") return `Small 550 $${b.smallRate}`;
+  return `Dump $${b.dumpRate}`;
 }
 
 function defaultRateFor(truck) {
   const b = db.settings.billing;
   if (truck === "dump") return b.dumpRate;
-  if (truck === "forklift") return b.forkliftRate || b.dumpRate || 160;
+  if (truck === "transfer") return b.transferRate || 160;
+  if (truck === "forklift") return b.forkliftRate || 160;
   return b.smallRate;
+}
+
+function loadSplitText(q) {
+  if (!q || !q.planned || !q.split) return "";
+  const n = Number(q.loadCount) || (q.loads && q.loads.length) || 0;
+  if (!n) return "";
+  return n + (n === 1 ? " load" : " loads") + " · " + q.split;
+}
+
+function deliveryDispatchRows(ticket, q) {
+  const lines = HDEngine.dispatchLines(q, ticket && ticket.id);
+  if (!lines.length) {
+    const truck = (q && q.planned && q.loads && q.loads[0]) ? q.loads[0].truck : (ticket && ticket.truck);
+    return `<tr><td>Delivery — ${esc(truckName(truck))}</td><td>${HDEngine.money(q.deliveryFee)}</td></tr>`;
+  }
+  return lines.map((l) =>
+    `<tr class="dispatch-line" data-ticket="${escAttr(l.ticketId)}"><td>Dispatch — ${esc(truckName(l.truck))} (load ${l.index} of ${l.count}, ticket ${esc(l.ticketId)})</td><td>${HDEngine.money(l.deliveryFee)}</td></tr>`
+  ).join("");
+}
+
+function bufferNote(q) {
+  if (q && q.loads && q.loads.length > 1) {
+    return q.loads.map((load, i) => {
+      const name = truckName(load.truck);
+      if (load.isDump || load.isTransfer) return name + " load " + (i + 1) + ": route buffer × " + Number(load.multiplier).toFixed(2) + ".";
+      return name + " load " + (i + 1) + ": no dump buffer.";
+    }).join(" ");
+  }
+  if (q && q.isDump) return "Dump route buffer × " + Number(q.multiplier).toFixed(2) + " already on the ticket.";
+  if (q && q.isTransfer) return "Transfer route buffer × " + Number(q.multiplier).toFixed(2) + " already on the ticket.";
+  if (q && q.isForklift) return "Forklift — no dump buffer.";
+  return "Small Truck 550 — no dump buffer.";
 }
 
 function catalogNeedsPrices() {
@@ -1223,14 +1274,16 @@ function catalogNeedsPrices() {
 
 function selectedTruck() {
   if ($("f-truck-forklift") && $("f-truck-forklift").checked) return "forklift";
+  if ($("f-truck-transfer") && $("f-truck-transfer").checked) return "transfer";
   if ($("f-truck-small") && $("f-truck-small").checked) return "small";
   return "dump";
 }
 
 function setTruck(truck, resetRate) {
   state.draft.truck = truck;
-  if ($("f-truck-dump")) $("f-truck-dump").checked = truck === "dump";
   if ($("f-truck-small")) $("f-truck-small").checked = truck === "small";
+  if ($("f-truck-dump")) $("f-truck-dump").checked = truck === "dump";
+  if ($("f-truck-transfer")) $("f-truck-transfer").checked = truck === "transfer";
   if ($("f-truck-forklift")) $("f-truck-forklift").checked = truck === "forklift";
   if (resetRate !== false && state.draft.adminRate) {
     const rate = defaultRateFor(truck);
@@ -1310,15 +1363,18 @@ function renderForm() {
   if ($("f-paid-by")) $("f-paid-by").value = d.paidBy || "";
   if ($("f-cust-copy")) $("f-cust-copy").checked = !!d.customerCopy;
   const truck = d.truck || "dump";
-  $("f-truck-dump").checked = truck === "dump";
-  $("f-truck-small").checked = truck === "small";
-  $("f-truck-forklift").checked = truck === "forklift";
+  if ($("f-truck-small")) $("f-truck-small").checked = truck === "small";
+  if ($("f-truck-dump")) $("f-truck-dump").checked = truck === "dump";
+  if ($("f-truck-transfer")) $("f-truck-transfer").checked = truck === "transfer";
+  if ($("f-truck-forklift")) $("f-truck-forklift").checked = truck === "forklift";
   const defaultRate = defaultRateFor(truck);
   $("f-rate").value = d.rateOverride != null ? d.rateOverride : defaultRate;
   $("f-admin-rate").checked = !!d.adminRate;
-  $("dump-rate-label").textContent = `$${b.dumpRate} / hour`;
-  $("small-rate-label").textContent = `$${b.smallRate} / hour`;
-  $("forklift-rate-label").textContent = `$${b.forkliftRate || b.dumpRate} / hour · extra fee below`;
+  if ($("small-rate-label")) $("small-rate-label").textContent = `$${b.smallRate} / hour`;
+  if ($("dump-rate-label")) $("dump-rate-label").textContent = `$${b.dumpRate} / hour`;
+  if ($("transfer-rate-label")) $("transfer-rate-label").textContent = `$${b.transferRate || 160} / hour`;
+  if ($("forklift-rate-label")) $("forklift-rate-label").textContent = `$${b.forkliftRate || 160} / hour · extra fee below`;
+  renderDuplicateWarning();
   $("price-banner").classList.toggle("hidden", !catalogNeedsPrices());
   const yardSel = $("f-yard");
   yardSel.innerHTML = db.settings.yards.map((y) =>
@@ -1388,6 +1444,7 @@ function ticketBilling() {
     const rate = Number(state.draft.rateOverride);
     if (isFinite(rate) && rate > 0) {
       if (state.draft.truck === "dump") b.dumpRate = rate;
+      else if (state.draft.truck === "transfer") b.transferRate = rate;
       else if (state.draft.truck === "forklift") b.forkliftRate = rate;
       else b.smallRate = rate;
     }
@@ -1404,6 +1461,7 @@ function currentQuote() {
     materials: state.draft.materials,
     forkliftFee: state.draft.forkliftFee,
     toteFee: state.draft.toteFee,
+    yardId: state.draft.yardId,
   });
   if (isQuarryYard(state.draft.yardId)) {
     q.quarryDirect = true;
@@ -1420,10 +1478,12 @@ function renderQuoteBox() {
   const toteBit = q.toteFee ? ` · ${HDEngine.money(q.toteFee)} tote / bagging` : "";
   const fuelBit = `${HDEngine.money(q.fuelSurcharge)} · ${HDEngine.fuelSentence(q)}`;
   const quarryBit = q.quarryDirect ? `<div style="margin-top:8px;color:#f3d7b5">Quarry direct — truckload</div>` : "";
+  const splitBit = loadSplitText(q) ? `<div class="load-split" style="margin-top:8px">${esc(loadSplitText(q))}</div>` : "";
   $("quote-box").innerHTML = `
     <div class="l muted" style="color:#d9c4a8">Delivery + materials + fuel</div>
     <div class="total">${HDEngine.money(q.total)}</div>
     <div style="margin-top:8px">${HDEngine.money(q.deliveryFee)} delivery · ${HDEngine.money(q.materialsTotal)} materials${feeBit}${toteBit} · ${fuelBit}</div>
+    ${splitBit}
     ${quarryBit}
     <div class="break">${routed ? q.formula : "Punch the delivery address and hit Calculate route to lock time and delivery fee.\nMaterials, the forklift fee, and the tote fee update the total as you type.\n" + HDEngine.fuelSentence(q)}</div>
     ${state.route ? `<div style="margin-top:10px;font-size:13px">Mapped ${state.route.miles.toFixed(1)} mi one-way via ${state.route.provider === "google" ? "Google" : "OSM / OSRM"}</div>` : ""}
@@ -1598,8 +1658,31 @@ function saveTicket(status) {
   else db.jobs.push(ticket);
   saveStore(db, true);
   state.draft = { ...ticket };
+  renderDuplicateWarning();
   toast("Saved " + ticket.id);
   return ticket;
+}
+
+function renderDuplicateWarning() {
+  const el = $("quote-dupes");
+  if (!el) return;
+  const hits = HDEngine.duplicateQuotes(db.jobs, {
+    id: state.draft.id,
+    customer: ($("f-customer") && $("f-customer").value) || state.draft.customer,
+    address: ($("f-address") && $("f-address").value) || state.draft.address,
+    phone: ($("f-phone") && $("f-phone").value) || state.draft.phone,
+  });
+  if (!hits.length) {
+    el.classList.add("hidden");
+    el.innerHTML = "";
+    return;
+  }
+  el.classList.remove("hidden");
+  el.innerHTML = `<strong>Possible duplicate quote.</strong> A live quote matches this name, address, or phone. Saving is not blocked.` +
+    hits.map((hit) => `<div class="dupe-row${hit.highlight ? " dupe-hit" : ""}">
+      <button type="button" class="ghost" data-open-quote="${escAttr(hit.id)}">Open ${esc(hit.id)}</button>
+      <span>${esc(hit.customer)} · ${esc(hit.address)} · ${HDEngine.money(hit.total)}</span>
+    </div>`).join("");
 }
 
 function openTicket(id) {
@@ -1717,9 +1800,10 @@ function renderSettings() {
   $("s-email").value = s.company.email;
   $("s-acct").value = s.company.accountingEmail;
   $("s-phone").value = s.company.phone;
-  $("s-dump").value = s.billing.dumpRate;
   $("s-small").value = s.billing.smallRate;
-  $("s-forklift").value = s.billing.forkliftRate || s.billing.dumpRate;
+  $("s-dump").value = s.billing.dumpRate;
+  if ($("s-transfer")) $("s-transfer").value = s.billing.transferRate || 160;
+  $("s-forklift").value = s.billing.forkliftRate || 160;
   $("s-mult").value = Math.round((s.billing.dumpTimeMultiplier - 1) * 100);
   $("s-trip").value = s.billing.tripMode;
   $("s-min").value = s.billing.minimumHours;
@@ -1751,20 +1835,23 @@ function renderSettings() {
 
 function saveSettings() {
   const s = db.settings;
-  const nextDump = Number($("s-dump").value) || 160;
-  const nextSmall = Number($("s-small").value) || 100;
+  const nextDump = Number($("s-dump").value) || 150;
+  const nextSmall = Number($("s-small").value) || 90;
+  const nextTransfer = Number($("s-transfer") && $("s-transfer").value) || 160;
   const nextFork = Number($("s-forklift").value) || 160;
   const nextBuf = Number($("s-mult").value);
   const ratesChanged = nextDump !== s.billing.dumpRate || nextSmall !== s.billing.smallRate
-    || nextFork !== (s.billing.forkliftRate || s.billing.dumpRate)
+    || nextTransfer !== (s.billing.transferRate || 160)
+    || nextFork !== (s.billing.forkliftRate || 160)
     || nextBuf !== Math.round((s.billing.dumpTimeMultiplier - 1) * 100);
   if (ratesChanged && !confirm("Save shop rates and dump-road buffer? This changes every new ticket.")) return;
   s.company.name = $("s-company").value.trim() || s.company.name;
   s.company.email = $("s-email").value.trim();
   s.company.accountingEmail = $("s-acct").value.trim();
   s.company.phone = $("s-phone").value.trim();
-  s.billing.dumpRate = Number($("s-dump").value) || 160;
-  s.billing.smallRate = Number($("s-small").value) || 100;
+  s.billing.smallRate = Number($("s-small").value) || 90;
+  s.billing.dumpRate = Number($("s-dump").value) || 150;
+  s.billing.transferRate = Number($("s-transfer") && $("s-transfer").value) || 160;
   s.billing.forkliftRate = Number($("s-forklift").value) || 160;
   s.billing.dumpTimeMultiplier = 1 + (Number($("s-mult").value) || 8) / 100;
   s.billing.tripMode = $("s-trip").value;
@@ -1915,7 +2002,11 @@ function buildPrint(ticket) {
   const toteRow = q.toteFee
     ? `<tr><td>Tote / bagging fee</td><td>${HDEngine.money(q.toteFee)}</td></tr>`
     : "";
-  const truckLine = `${truckName(ticket.truck)} @ ${HDEngine.money(q.rate)}/hr`;
+  const splitText = loadSplitText(q);
+  const truckLine = splitText && q.loadCount > 1
+    ? splitText
+    : `${truckName((q.planned && q.loads && q.loads[0]) ? q.loads[0].truck : ticket.truck)} @ ${HDEngine.money(q.rate)}/hr`;
+  const dispatchRows = deliveryDispatchRows(ticket, q);
   const weekLabel = HDEngine.weekLabel(q.dieselWeekOf) || "—";
   const fuelRow = `<tr><td colspan="2">${esc(HDEngine.fuelSentence(q))}</td></tr>`;
   const payLine = HDReceipt.paymentLine(ticket);
@@ -1961,7 +2052,7 @@ function buildPrint(ticket) {
       ${loadSummary ? `<div style="margin-top:6px"><strong>Load:</strong> ${esc(loadSummary)}</div>` : ""}
       <h3 style="margin-top:18px">Delivery</h3>
       <table>
-        <tr><td>Delivery — ${esc(truckName(ticket.truck))}</td><td>${HDEngine.money(q.deliveryFee)}</td></tr>
+        ${dispatchRows}
         ${feeRow}
         ${toteRow}
       </table>
@@ -2003,7 +2094,8 @@ function buildPrint(ticket) {
         <div style="text-align:right">
           <div class="sheet-id" style="font-size:22px;font-weight:700">${esc(ticket.id)}</div>
           <div>${when}</div>
-          <div>${truckName(ticket.truck).toUpperCase()} · ${esc(truckLine)}</div>
+          <div>${esc(truckLine)}</div>
+          ${splitText ? `<div class="load-split">Loads: ${esc(splitText)}</div>` : ""}
           <div>Diesel week of ${esc(weekLabel)}</div>
         </div>
       </div>
@@ -2016,18 +2108,22 @@ function buildPrint(ticket) {
         </div>
       </div>
       <h3>Load</h3>
+      ${splitText ? `<p class="load-split"><strong>Loads:</strong> ${esc(splitText)}</p>` : ""}
       <table><thead><tr><th>Material</th><th>Qty</th></tr></thead><tbody>
         ${(ticket.materials || []).map((m) => `<tr><td>${esc(m.name)}</td><td>${m.qty} ${esc(m.unit)}</td></tr>`).join("") || "<tr><td colspan=2>See dispatcher</td></tr>"}
       </tbody></table>
+      ${q.loadCount > 1 ? `<h3>Dispatch</h3><table>${dispatchRows}</table>` : ""}
       <p><strong>Scale weight:</strong> Gross ____________ &nbsp; Tare ____________ &nbsp; Net ____________ &nbsp; Scale ticket # ____________</p>
       <p><strong>House notes:</strong> ${esc(notes || "None")}</p>
       <p><strong>Time:</strong>
-         ${q.isDump ? "Dump route buffer × " + Number(q.multiplier).toFixed(2) + " already on the ticket." : q.isForklift ? "Forklift truck — no dump buffer." : "Small truck — no dump buffer."}
+         ${bufferNote(q)}
          ${q.forkliftFee ? " Forklift / extra fee " + HDEngine.money(q.forkliftFee) + "." : ""}</p>
       <table>
         <tr><td>Mapped one-way</td><td>${q.oneWayMin.toFixed(1)} min · ${(ticket.route ? ticket.route.miles : 0).toFixed(1)} mi</td></tr>
         <tr><td>Trip</td><td>${q.tripFactor === 2 ? "Round trip" : "One way"}</td></tr>
-        <tr><td>Billable time</td><td>${q.billableHours.toFixed(2)} hr @ ${HDEngine.money(q.rate)}/hr</td></tr>
+        ${q.loads && q.loads.length > 1
+          ? q.loads.map((load, i) => `<tr class="dispatch-line" data-ticket="${escAttr(ticket.id)}"><td>Billable time — load ${i + 1} of ${q.loads.length} (${esc(truckName(load.truck))})</td><td>${load.billableHours.toFixed(2)} hr @ ${HDEngine.money(load.rate)}/hr</td></tr>`).join("")
+          : `<tr><td>Billable time</td><td>${q.billableHours.toFixed(2)} hr @ ${HDEngine.money(q.rate)}/hr</td></tr>`}
         ${fuelRow}
       </table>
       <p><strong>Route:</strong> ${(ticket.route ? ticket.route.miles.toFixed(1) : "—")} miles one-way from ${esc(yard.address)}.</p>
@@ -2048,6 +2144,7 @@ function emailAccounting(ticket) {
   const rcpt = HDReceipt.recipients(ticket);
   const quarry = ticket.quarryDirect || isQuarryYard(ticket.yardId);
   const quoting = isQuoteStatus(ticket.status);
+  const splitText = loadSplitText(q);
   const subject = quoting
     ? `Hilton Dispatch QUOTE ${ticket.id} — ${ticket.customer} — ${HDEngine.money(q.total)}`
     : `Hilton Dispatch ${ticket.id} — ${ticket.customer} — ${HDEngine.money(q.total)}`;
@@ -2065,7 +2162,8 @@ function emailAccounting(ticket) {
     `Phone: ${ticket.phone || ""}`,
     `Email: ${ticket.email || ""}${ticket.ccEmail ? "  CC " + ticket.ccEmail : ""}`,
     `Origin yard: ${yard.name} — ${yard.address}`,
-    `Truck: ${truckName(ticket.truck)} @ ${HDEngine.money(q.rate)}/hr`,
+    splitText ? `Loads: ${splitText}` : `Truck: ${truckName(ticket.truck)} @ ${HDEngine.money(q.rate)}/hr`,
+    ...HDEngine.dispatchLines(q, ticket.id).map((l) => `Dispatch line ${l.index} of ${l.count} (ticket ${ticket.id}): ${truckName(l.truck)} ${HDEngine.money(l.deliveryFee)}`),
     `Mapped one-way: ${(q.oneWayMin || 0).toFixed(1)} min`,
     q.forkliftFee ? `Forklift / extra equipment fee: ${HDEngine.money(q.forkliftFee)}` : `Forklift / extra equipment fee: $0.00`,
     q.toteFee ? `Tote / bagging fee: ${HDEngine.money(q.toteFee)}` : null,
@@ -2402,8 +2500,9 @@ async function onReady() {
   });
   $("print-inv").addEventListener("click", () => printPacket("print"));
   $("email-acct").addEventListener("click", () => printPacket("email"));
-  $("f-truck-dump").addEventListener("change", () => setTruck("dump"));
   $("f-truck-small").addEventListener("change", () => setTruck("small"));
+  $("f-truck-dump").addEventListener("change", () => setTruck("dump"));
+  if ($("f-truck-transfer")) $("f-truck-transfer").addEventListener("change", () => setTruck("transfer"));
   $("f-truck-forklift").addEventListener("change", () => setTruck("forklift"));
   $("f-yard").addEventListener("change", () => {
     state.draft.yardId = $("f-yard").value;
@@ -2451,6 +2550,8 @@ async function onReady() {
     ).join("");
   }
   $("f-customer").addEventListener("input", (e) => {
+    state.draft.customer = e.target.value;
+    renderDuplicateWarning();
     onCustomerFieldChange();
     if (custHover) return;
     clearTimeout(custTimer);
@@ -2506,7 +2607,13 @@ async function onReady() {
   });
   $("qb-save").addEventListener("click", saveQbEditor);
   $("qb-add").addEventListener("click", () => renderQbEditor(null));
+  if ($("f-phone")) $("f-phone").addEventListener("input", (e) => {
+    state.draft.phone = e.target.value;
+    renderDuplicateWarning();
+  });
   $("f-address").addEventListener("input", (e) => {
+    state.draft.address = e.target.value;
+    renderDuplicateWarning();
     const box = $("addr-suggest");
     if (HDMaps.hoverSuggest) return;
     HDMaps.debounceSuggest(e.target.value, (hits) => {
@@ -2614,6 +2721,11 @@ async function onReady() {
     }
     const row = e.target.closest("[data-open]");
     if (row) openTicket(row.dataset.open);
+  });
+  if ($("quote-dupes")) $("quote-dupes").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-open-quote]");
+    if (!btn) return;
+    openTicket(btn.dataset.openQuote);
   });
   $("save-settings").addEventListener("click", saveSettings);
   if ($("pull-eia")) $("pull-eia").addEventListener("click", pullEiaWeek);

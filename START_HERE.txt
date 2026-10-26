@@ -12,16 +12,18 @@ HILTON DISPATCH — open this on a yard computer
    Boulders/Aggregates = boulder flyer
    Willow Creek = pit tons only. Selecting Willow Creek as origin opens this tab.
 
-4. Billing is always 1 load. Extra site minutes and extra wait minutes are 0.
+4. Most products are 1 load. Topsoil, Forest Loam, Topsoil Plus, and Willow Creek rock
+   split into bobtail and transfer loads. Extra site minutes and extra wait minutes are 0.
    Forklift / extra equipment $ defaults to 0.
+   A forklift from 5 South Stage includes $40 in the delivery fee.
    Put a driver or PO in Notes if the crew needs it.
    Fuel surcharge % is typed in Settings (default 0). It is that percent of the delivery fee.
    Diesel this week and week-of print as the EIA index. Pull EIA week does not change the percent.
-   Dump 8% road buffer is Settings-only. Crew does not see it on the ticket.
+   Dump and transfer 8% road buffer is Settings-only. Crew does not see it on the ticket.
 
 5. Settings (admin password from .env) — confirm:
-   Dump $160/hr · Small $100/hr · Forklift $160/hr
-   Dump-road buffer 8%
+   Small Truck 550 $90/hr · Dump $150/hr · Transfer $160/hr · Forklift $160/hr
+   Dump-road buffer 8% (dump and transfer)
    Round trip
    Nick / dispatch email = dispatch@hiltonlandscaping.com
    Paste Google Maps API key (Maps JS + Directions + Geocoding + Places API New)

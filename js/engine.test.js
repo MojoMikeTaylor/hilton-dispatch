@@ -63,7 +63,7 @@ const twoLoads = E.quote({
   materials: [],
   loads: 2,
 });
-assert(twoLoads.loadCount === 1, "billing is always 1 load");
+assert(twoLoads.loadCount === 1, "a passed load count does not add loads");
 assert(Math.abs(twoLoads.tripMin - 40) < 0.01, "a passed load count does not multiply the trip");
 assert(Math.abs(twoLoads.adjustedDriveMin - 43.2) < 0.01, "8% still applies to the one-load road time");
 
@@ -202,6 +202,168 @@ const blankTote = E.quote({
   toteFee: "",
 });
 assert(blankTote.toteFee === 0, "an empty tote fee is $0");
+
+const shop = {
+  dumpRate: 150,
+  smallRate: 90,
+  transferRate: 160,
+  forkliftRate: 160,
+  dumpTimeMultiplier: 1.08,
+  tripMode: "roundtrip",
+  minimumHours: 1,
+  incrementMinutes: 15,
+  loadMinutes: 15,
+  unloadMinutes: 15,
+  taxRate: 0,
+};
+
+const transfer = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "transfer",
+  billing: shop,
+  materials: [],
+});
+assert(transfer.isTransfer && !transfer.isDump, "transfer is its own truck");
+assert(Math.abs(transfer.adjustedDriveMin - 64.8) < 0.01, "transfer gets the same 8% road buffer as dump");
+assert(Math.abs(transfer.siteMin - 30) < 0.01, "transfer buffer stays off load and unload");
+assert(Math.abs(transfer.rate - 160) < 0.01, "transfer truck is $160/hr");
+assert(Math.abs(transfer.deliveryFee - 280) < 0.01, "transfer 1.75 hr × $160 = $280");
+assert(transfer.formula.indexOf("transfer-truck buffer") >= 0, "formula names the transfer buffer");
+
+function stageFee(yardId) {
+  return E.quote({
+    oneWaySeconds: 30 * 60,
+    truck: "forklift",
+    yardId,
+    billing: shop,
+    materials: [],
+    forkliftFee: 0,
+  });
+}
+const medfordFork = stageFee("medford");
+const cpFork = stageFee("cp");
+const willowFork = stageFee("willow");
+assert(Math.abs(cpFork.deliveryFee - 240) < 0.01, "cp forklift has no South Stage adder");
+assert(Math.abs(willowFork.deliveryFee - 240) < 0.01, "willow forklift has no South Stage adder");
+assert(medfordFork.southStage === 40 && Math.abs(medfordFork.deliveryFee - 280) < 0.01, "medford forklift adds $40 inside the delivery fee");
+assert(medfordFork.forkliftFee === 0, "South Stage adder is not the separate forklift fee");
+assert(Math.abs(medfordFork.total - medfordFork.deliveryFee) < 0.01, "the $40 is not added a second time");
+assert(Math.abs(stageFee("dump-yard-missing").deliveryFee - cpFork.deliveryFee) < 0.01, "an unknown yard does not get the adder");
+const medfordDump = E.quote({ oneWaySeconds: 30 * 60, truck: "dump", yardId: "medford", billing: shop, materials: [] });
+assert(medfordDump.southStage === 0 && Math.abs(medfordDump.deliveryFee - (medfordDump.billableHours * 150)) < 0.01, "dump from medford does not get the forklift adder");
+const medfordFueled = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "forklift",
+  yardId: "medford",
+  billing: { ...shop, surchargePercent: 10 },
+  materials: [],
+});
+assert(Math.abs(medfordFueled.fuelSurcharge - 28) < 0.01, "fuel surcharge uses the delivery fee after the $40 is included");
+
+function splitOf(qty, material, truck) {
+  const q = E.quote({
+    oneWaySeconds: 30 * 60,
+    truck: truck || "dump",
+    billing: shop,
+    materials: [{ ...material, qty }],
+  });
+  return q.loads.map((load) => (load.truck === "transfer" ? "T" : load.truck === "small" ? "B" : load.truck)).join("+");
+}
+const wc = { id: "q-jaw-run", name: "Jaw Run", unit: "ton", price: 12.5, book: "willow", source: "quarry", truckload_only: true };
+assert(splitOf(30, wc) === "T+B", "30 yd Willow Creek rock is 1 transfer + 1 bobtail");
+assert(splitOf(40, wc) === "T+T", "40 yd Willow Creek rock is 2 transfers");
+assert(splitOf(10, wc) === "B", "10 yd Willow Creek rock is 1 bobtail");
+assert(splitOf(12, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }) === "B", "12 yd topsoil is 1 bobtail");
+assert(splitOf(24, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }) === "T", "24 yd topsoil is 1 transfer");
+assert(splitOf(25, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }) === "T+B", "25 yd topsoil is 1 transfer + 1 bobtail");
+assert(splitOf(36, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }) === "T+B", "36 yd topsoil is 1 transfer + 1 bobtail");
+assert(splitOf(37, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }) === "T+T", "37 yd topsoil is 2 transfers");
+assert(splitOf(15, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 27 }) === "B", "15 yd forest loam is 1 bobtail");
+assert(splitOf(16, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 27 }) === "T", "16 yd forest loam is 1 transfer");
+assert(splitOf(30, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 27 }) === "T", "30 yd forest loam is 1 transfer");
+assert(splitOf(31, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 27 }) === "T+B", "31 yd forest loam is 1 transfer + 1 bobtail");
+assert(splitOf(45, { id: "topsoil-plus", name: "Topsoil Plus", unit: "yd", price: 34 }) === "T+B", "45 yd topsoil plus is 1 transfer + 1 bobtail");
+assert(splitOf(46, { id: "topsoil-plus", name: "Topsoil Plus", unit: "yd", price: 34 }) === "T+T", "46 yd topsoil plus is 2 transfers");
+assert(splitOf(40, { id: "fresh-fines", name: "Fresh Fines Bark", unit: "yd", price: 34 }, "dump") === "dump", "bark stays one load on the selected truck");
+assert(splitOf(40, { name: "Topsoil", unit: "yd", price: 38 }, "dump") === "dump", "a topsoil line without the store id stays one load");
+
+const wc30 = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "dump",
+  billing: shop,
+  yardId: "willow",
+  materials: [{ ...wc, qty: 30 }],
+});
+assert(wc30.planned && wc30.loadCount === 2 && wc30.split === "1 transfer + 1 bobtail", "30 yd split label");
+assert(Math.abs(wc30.loads[0].deliveryFee - 280) < 0.01 && Math.abs(wc30.loads[1].deliveryFee - 135) < 0.01, "transfer $280 and bobtail $135");
+assert(Math.abs(wc30.deliveryFee - 415) < 0.01, "delivery fee is the sum of the load fees");
+assert(Math.abs(wc30.materialsTotal - 375) < 0.01, "material price is charged once");
+assert(Math.abs(wc30.total - 790) < 0.01, "invoice total is delivery sum plus materials");
+assert(wc30.loads[0].tripMin === wc30.loads[1].tripMin, "each load uses the same route");
+const lines = E.dispatchLines(wc30, "HD-30");
+assert(lines.length === 2 && lines[0].ticketId === "HD-30" && lines[1].ticketId === "HD-30", "two dispatch lines under one ticket");
+assert(lines[0].truck === "transfer" && lines[1].truck === "small", "dispatch lines follow the split");
+
+const wc40 = E.quote({ oneWaySeconds: 30 * 60, truck: "small", billing: shop, materials: [{ ...wc, qty: 40 }] });
+assert(wc40.split === "2 transfers" && Math.abs(wc40.deliveryFee - 560) < 0.01, "40 yd is two transfer fees");
+assert(E.dispatchLines(wc40, "HD-40").length === 2, "40 yd prints two dispatch lines");
+const wc10 = E.quote({ oneWaySeconds: 30 * 60, truck: "transfer", billing: shop, materials: [{ ...wc, qty: 10 }] });
+assert(wc10.loadCount === 1 && wc10.split === "1 bobtail" && wc10.truck === "small", "10 yd is one bobtail even if transfer was selected");
+assert(E.dispatchLines(wc10, "HD-10").length === 0, "one load stays a single delivery row");
+const ignoredLoads = E.quote({ oneWaySeconds: 30 * 60, truck: "dump", billing: shop, loads: 99, materials: [{ ...wc, qty: 10 }] });
+assert(ignoredLoads.loadCount === 1 && ignoredLoads.truck === "small", "the loads argument does not override the split");
+
+const piled = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "dump",
+  billing: shop,
+  materials: [
+    { id: "q-jaw-run", qty: 10, unit: "ton", price: 12.5, book: "willow" },
+    { id: "q-34-minus", qty: 10, unit: "ton", price: 13, book: "willow" },
+  ],
+});
+assert(piled.loadCount === 1 && piled.truck === "transfer", "two pit rocks that add up to a transfer are one load");
+const soils = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "dump",
+  billing: shop,
+  materials: [
+    { id: "forest-loam", qty: 15, unit: "yd", price: 27 },
+    { id: "topsoil-plus", qty: 15, unit: "yd", price: 34 },
+  ],
+});
+assert(soils.loadCount === 1 && soils.truck === "transfer", "forest loam and topsoil plus share the 15/30 capacity");
+const mixed = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "dump",
+  billing: shop,
+  materials: [
+    { id: "topsoil", qty: 12, unit: "yd", price: 25 },
+    { id: "fresh-fines", qty: 20, unit: "yd", price: 34 },
+  ],
+});
+assert(mixed.loadCount === 1 && mixed.truck === "small", "bark riding with topsoil does not add a load");
+
+// The desk's $1,785 figure needs that job's drive time. Catalog prices alone do not reproduce it, so it is not asserted.
+
+const dupes = E.duplicateQuotes([
+  { id: "Q-LOW", status: "quote", customer: "Ada Lovelace", address: "1 Oak St.", phone: "111", quote: { total: 400 } },
+  { id: "Q-HIGH", status: "quote", customer: "Other", address: "9 Pine St", phone: "", quote: { total: 900 } },
+  { id: "Q-PHONE", status: "quote", customer: "Phone Co", address: "elsewhere", phone: "(541) 555-0100", quote: { total: 900 } },
+  { id: "Q-BOOKED", status: "new", customer: "Ada Lovelace", address: "9 Pine St", phone: "5415550100", quote: { total: 5000 } },
+  { id: "Q-VOID", status: "void", customer: "Ada Lovelace", address: "9 Pine St", phone: "", quote: { total: 9999 } },
+  { id: "Q-SELF", status: "quote", customer: "Ada Lovelace", address: "9 Pine St", phone: "541-555-0100", quote: { total: 2000 } },
+], {
+  id: "Q-SELF",
+  customer: "ada  lovelace",
+  address: "9 pine st",
+  phone: "541.555.0100",
+});
+assert(dupes.map((d) => d.id).join(",") === "Q-HIGH,Q-PHONE,Q-LOW", "live quotes match name, address, or phone; booked and void do not");
+assert(dupes[0].highlight && dupes[1].highlight && !dupes[2].highlight, "the higher total is highlighted, including a tie");
+assert(!dupes.some((d) => d.id === "Q-SELF"), "the open quote is not a duplicate of itself");
+const none = E.duplicateQuotes([{ id: "Q", status: "quote", customer: "", address: "", phone: "", quote: { total: 1 } }], { customer: "", address: "", phone: "" });
+assert(none.length === 0, "blank fields do not match every quote");
 
 if (process.exitCode) {
   console.error("Engine tests failed.");

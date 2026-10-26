@@ -129,8 +129,8 @@ assert.strictEqual((board.match(/class="week-col"/g) || []).length, 6);
 assert.ok(board.indexOf("EARLY") < board.indexOf("LATE"), "cards render in time order");
 assert.ok(board.includes("Early Co") && board.includes("Later Co"));
 assert.ok(board.includes("Hilton Landscape Supply (Mothership)") && board.includes("Hilton Landscape Supply (Phoenix) #2"));
-assert.ok(board.includes("Dump truck") && board.includes("8:15 AM"));
-assert.ok(board.includes("Small truck") && board.includes("3:00 PM"));
+assert.ok(board.includes("Dump") && board.includes("8:15 AM"));
+assert.ok(board.includes("Small Truck 550") && board.includes("3:00 PM"));
 assert.ok(board.includes('data-open="EARLY"') && board.includes('data-open="LATE"'));
 assert.ok(!board.includes("Quote Co") && !board.includes("QUOTE"));
 assert.ok(board.includes("No deliveries"));
@@ -161,5 +161,49 @@ const qCustomer = quoted.slice(quoted.indexOf('<section class="sheet customer">'
 const qHouse = quoted.slice(quoted.indexOf('<section class="sheet house">'));
 assert.strictEqual(sheetId(qCustomer), "QUOTE HD-WEEK-9");
 assert.strictEqual(sheetId(qHouse), "HD-WEEK-9");
+
+run(`
+  db.jobs = [
+    { id: "MULTI", status: "new", customer: "Nick Job", yardId: "willow", truck: "transfer", deliverOn: "2026-10-20T08:15",
+      quote: { planned: true, loadCount: 2, split: "1 transfer + 1 bobtail", total: 1785, loads: [{ truck: "transfer" }, { truck: "small" }] } }
+  ];
+  state.boardView = "week";
+  state.filter = "";
+  renderBoard();
+`);
+assert.ok(els["job-table"].innerHTML.includes("2 loads · 1 transfer + 1 bobtail"), "week board shows the load count and the split");
+run(`state.boardView = "live"; renderBoard();`);
+assert.ok(els["job-table"].innerHTML.includes("2 loads · 1 transfer + 1 bobtail"), "live board shows the load count and the split");
+
+const upgraded = json(`(function () {
+  var store = normalizeStore({
+    settings: {
+      billing: { dumpRate: 160, smallRate: 100, forkliftRate: 160 },
+      materials: [{ id: "topsoil", name: "Topsoil", category: "Soils", unit: "yd", price: 99 }]
+    },
+    jobs: [{ id: "KEEP", customer: "Ada", status: "new", address: "1 Oak" }]
+  });
+  var top = store.settings.materials.find(function (m) { return m.id === "topsoil"; });
+  return {
+    dump: store.settings.billing.dumpRate,
+    small: store.settings.billing.smallRate,
+    transfer: store.settings.billing.transferRate,
+    jobs: store.jobs.length,
+    id: store.jobs[0].id,
+    customer: store.jobs[0].customer,
+    price: top.price
+  };
+})()`);
+assert.strictEqual(upgraded.dump, 150);
+assert.strictEqual(upgraded.small, 90);
+assert.strictEqual(upgraded.transfer, 160);
+assert.strictEqual(upgraded.jobs, 1);
+assert.strictEqual(upgraded.id, "KEEP");
+assert.strictEqual(upgraded.customer, "Ada");
+assert.strictEqual(upgraded.price, 99);
+const customRates = json(`normalizeStore({ settings: { billing: { dumpRate: 175, smallRate: 95, transferRate: 170 } }, jobs: [{ id: "KEEP2", customer: "Bea" }] }).settings.billing`);
+assert.strictEqual(customRates.dumpRate, 175);
+assert.strictEqual(customRates.smallRate, 95);
+assert.strictEqual(customRates.transferRate, 170);
 
 console.log("week.test.js OK");

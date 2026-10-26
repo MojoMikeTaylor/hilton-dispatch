@@ -107,8 +107,8 @@ const list = html.slice(html.indexOf("October 14"));
 assert.ok(list.indexOf("EARLY") < list.indexOf("LATE"));
 assert.ok(list.includes("Early Co") && list.includes("Later Co"));
 assert.ok(list.includes("Hilton Landscape Supply (Mothership)") && list.includes("Hilton Landscape Supply (Phoenix) #2"));
-assert.ok(list.includes("Dump truck") && list.includes("8:15 AM"));
-assert.ok(list.includes("Small truck") && list.includes("3:00 PM"));
+assert.ok(list.includes("Dump") && list.includes("8:15 AM"));
+assert.ok(list.includes("Small Truck 550") && list.includes("3:00 PM"));
 assert.ok(!list.includes("Quote Co") && !list.includes("Void Co"));
 assert.ok(html.includes('data-month-day="2026-10-14"') && html.includes("month-count\">4<"));
 

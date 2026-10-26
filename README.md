@@ -8,8 +8,8 @@ Crew takes the call, punches the delivery address, picks the loading yard, maps 
 
 1. Customer calls. Hit **New ticket**.
 2. Name, phone, delivery address, which yard is loading the truck.
-3. Dump truck ($160/hr) or small truck ($100/hr). Forklift truck is optional for palletized stone. The dump-road buffer stays in Settings.
-4. Billing is always **1 load**. Extra site minutes and extra wait minutes are **0**. Forklift / extra equipment $ defaults to **0**. A driver or PO goes in Notes. Fuel surcharge is the percent typed in Settings, applied to the delivery fee only. Diesel price and week-of print as the EIA index.
+3. Small Truck 550 ($90/hr), Dump ($150/hr), Transfer Truck ($160/hr), or Forklift ($160/hr). The dump-road buffer stays in Settings and applies to dump and transfer trucks.
+4. Most products are **1 load**. Topsoil, Forest Loam, Topsoil Plus, and Willow Creek quarry rock split into bobtail and transfer loads; the delivery fee is the sum. Extra site minutes and extra wait minutes are **0**. Forklift / extra equipment $ defaults to **0**. A forklift leaving 5 South Stage (yard `medford`) includes $40 in the delivery fee. A driver or PO goes in Notes. Fuel surcharge is the percent typed in Settings, applied to the delivery fee only. Diesel price and week-of print as the EIA index.
 5. Search the **active material tab** (Bark/Mulch, Flagstone, Boulders/Aggregates, Willow Creek). Choosing Willow Creek as origin defaults the picker to the Willow Creek tab. Crew can switch tabs on purpose.
 6. **Calculate route** — map draws, delivery fee locks, status becomes Routed.
 7. **Print invoice + route sheet** — page 1 full math for accounting, page 2 driver sheet.
@@ -21,12 +21,12 @@ Crew takes the call, punches the delivery address, picks the loading yard, maps 
 Printed on every invoice.
 
 1. Map one-way drive minutes from the chosen yard to the job (Google if a key is saved; else OpenStreetMap + OSRM).
-2. Trip minutes = roundtrip ? one-way × 2 : one-way. Always 1 load.
-3. Dump truck: multiply **road** minutes by the admin dump-road buffer (default 1.08). Small / forklift trucks use mapped road time.
+2. Trip minutes = roundtrip ? one-way × 2 : one-way. Each load is its own trip.
+3. Dump and transfer trucks: multiply **road** minutes by the admin dump-road buffer (default 1.08). Small Truck 550 and forklift use mapped road time.
 4. Site minutes = load + unload. Extra minutes are 0.
 5. Raw hours = (adjusted road + site) / 60.
 6. Billable hours = max(1 hour, round up to 15 minutes).
-7. Delivery fee = billable hours × $160 dump / $100 small / $160 forklift (or admin rates).
+7. Delivery fee = billable hours × $90 Small Truck 550 / $150 dump / $160 transfer / $160 forklift (or admin rates). Forklift from Medford / 5 South Stage adds $40 inside that fee. Eligible multi-load tickets sum one fee per load.
 8. Materials = qty × book price. Materials are not fuel-surcharged.
 9. Forklift / extra equipment fee = the dollar amount typed on the ticket.
 10. Fuel surcharge = delivery fee × (typed percent / 100). The office types the percent each week. Default is 0. Diesel $/gal and week-of are the EIA West Coast PADD 5 index on the invoice. Pull EIA week updates the price and the date, not the percent.

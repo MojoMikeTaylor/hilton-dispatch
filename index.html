@@ -84,7 +84,7 @@
             <p class="muted">Customer calls. Crew punches the address. Pick the yard that is loading the truck.</p>
             <div id="price-banner" class="banner hidden">
               <strong>Material prices are still $0.</strong>
-              Open Material Book and punch your real yard prices before you bill anyone. Delivery rates ($160 / $100) are already set.
+              Open Material Book and punch your real yard prices before you bill anyone. Delivery rates (Small Truck 550 $90, Dump $150, Transfer $160, Forklift $160) are already set.
             </div>
             <div id="quarry-banner" class="banner quarry-banner hidden">
               <strong>Quarry direct — truckload</strong>
@@ -113,13 +113,15 @@
               <input id="f-address" type="text" placeholder="Street, city, OR zip" autocomplete="off" />
               <div id="addr-suggest" class="addr-suggest hidden"></div>
             </div>
+            <div id="quote-dupes" class="banner hidden"></div>
             <label>Origin yard</label>
             <select id="f-yard"></select>
             <label>Truck</label>
             <div class="truck-pick">
-              <label class="choice"><input id="f-truck-dump" type="radio" name="truck" checked /><span><strong>Dump truck</strong><em id="dump-rate-label">$160 / hour</em></span></label>
-              <label class="choice"><input id="f-truck-small" type="radio" name="truck" /><span><strong>Small truck</strong><em id="small-rate-label">$100 / hour</em></span></label>
-              <label class="choice"><input id="f-truck-forklift" type="radio" name="truck" /><span><strong>Forklift truck</strong><em id="forklift-rate-label">$160 / hour · extra fee below</em></span></label>
+              <label class="choice"><input id="f-truck-small" type="radio" name="truck" /><span><strong>Small Truck 550</strong><em id="small-rate-label">$90 / hour</em></span></label>
+              <label class="choice"><input id="f-truck-dump" type="radio" name="truck" checked /><span><strong>Dump</strong><em id="dump-rate-label">$150 / hour</em></span></label>
+              <label class="choice"><input id="f-truck-transfer" type="radio" name="truck" /><span><strong>Transfer Truck</strong><em id="transfer-rate-label">$160 / hour</em></span></label>
+              <label class="choice"><input id="f-truck-forklift" type="radio" name="truck" /><span><strong>Forklift</strong><em id="forklift-rate-label">$160 / hour · extra fee below</em></span></label>
             </div>
             <div class="row">
               <div><label>Status</label>
@@ -165,7 +167,7 @@
               <label>Forklift / extra equipment $</label>
               <input id="f-forklift-fee" type="number" min="0" step="1" value="0" />
             </div>
-            <p class="muted" style="margin:6px 0 0">Quotes and voids stay off the live board. Billing is one load. Tote / bagging fee starts blank. Forklift fee defaults to 0. Fuel surcharge comes from Settings.</p>
+            <p class="muted" style="margin:6px 0 0">Quotes and voids stay off the live board. Topsoil, Forest Loam, Topsoil Plus, and Willow Creek rock split into bobtail and transfer loads. Every other product stays one load. Tote / bagging fee starts blank. Forklift fee defaults to 0. A forklift from 5 South Stage includes $40 in the delivery fee. Fuel surcharge comes from Settings.</p>
             <label>Notes</label>
             <textarea id="f-notes" placeholder="Gate code, driver, PO, dump spot, call 10 minutes out…"></textarea>
 
@@ -252,13 +254,14 @@
             </div>
             <label>Phone</label>
             <input id="s-phone" type="tel" />
-            <div class="row-3">
-              <div><label>Dump truck $/hr</label><input id="s-dump" type="number" step="1" /></div>
-              <div><label>Small truck $/hr</label><input id="s-small" type="number" step="1" /></div>
-              <div><label>Forklift truck $/hr</label><input id="s-forklift" type="number" step="1" /></div>
+            <div class="row-4">
+              <div><label>Small Truck 550 $/hr</label><input id="s-small" type="number" step="1" /></div>
+              <div><label>Dump $/hr</label><input id="s-dump" type="number" step="1" /></div>
+              <div><label>Transfer truck $/hr</label><input id="s-transfer" type="number" step="1" /></div>
+              <div><label>Forklift $/hr</label><input id="s-forklift" type="number" step="1" /></div>
             </div>
             <div class="row">
-              <div><label>Dump-road buffer % (admin, dump trucks only)</label><input id="s-mult" type="number" step="1" /></div>
+              <div><label>Dump-road buffer % (admin, dump and transfer)</label><input id="s-mult" type="number" step="1" /></div>
               <div>
                 <label>Trip billing</label>
                 <select id="s-trip">

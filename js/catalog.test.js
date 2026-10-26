@@ -19,7 +19,25 @@ function assert(cond, msg) {
 
 assert(D.security.pin === "", "no default crew PIN ships in code — it comes from .env / Settings");
 assert(D.security.adminPassword === "", "no default admin password ships in code");
-assert(D.billing.dumpRate === 160 && D.billing.smallRate === 100, "dump $160 / small $100");
+assert(D.billing.smallRate === 90 && D.billing.dumpRate === 150 && D.billing.transferRate === 160 && D.billing.forkliftRate === 160, "small 550 $90, dump $150, transfer $160, forklift $160");
+const rateKeys = Object.keys(D.billing);
+assert(rateKeys.indexOf("smallRate") < rateKeys.indexOf("dumpRate") && rateKeys.indexOf("dumpRate") < rateKeys.indexOf("transferRate") && rateKeys.indexOf("transferRate") < rateKeys.indexOf("forkliftRate"), "default rate fields follow Small, Dump, Transfer, Forklift");
+const deskHtml = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+const deskOrder = ["f-truck-small", "f-truck-dump", "f-truck-transfer", "f-truck-forklift"];
+let deskAt = -1;
+deskOrder.forEach((id) => {
+  const at = deskHtml.indexOf('id="' + id + '"');
+  assert(at > deskAt, "desk truck order includes " + id);
+  deskAt = at;
+});
+assert(deskHtml.includes("Small Truck 550") && deskHtml.includes("Transfer Truck") && deskHtml.includes("$90 / hour") && deskHtml.includes("$150 / hour"), "desk labels name Small Truck 550, Transfer, and the new rates");
+const settingsOrder = ["s-small", "s-dump", "s-transfer", "s-forklift"];
+let settingsAt = -1;
+settingsOrder.forEach((id) => {
+  const at = deskHtml.indexOf('id="' + id + '"');
+  assert(at > settingsAt, "settings rate order includes " + id);
+  settingsAt = at;
+});
 assert(C.books.map((b) => b.id).join(",") === "store,flagstone,boulders,willow", "four isolated books");
 
 const store = D.materials.filter((m) => C.inBook(m, "store"));

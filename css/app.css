@@ -130,6 +130,10 @@ input[type="text"], input[type="tel"], input[type="email"], input[type="number"]
 textarea { min-height: 84px; resize: vertical; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.row-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.load-split { font-weight: 700; }
+.dupe-row { margin-top: 6px; }
+.dupe-hit { background: #efe0b8; border: 1px solid #c4a35a; border-radius: 8px; padding: 8px 10px; }
 
 .primary {
   background: var(--burgundy); color: #fff; padding: 11px 16px; border-radius: 10px; font-weight: 600;
@@ -157,6 +161,7 @@ tr.clickable:hover { background: #faf4ea; }
 }
 .badge.dump { background: #3b2118; color: #f3d7b5; }
 .badge.small { background: #203326; color: #d5ecd8; }
+.badge.transfer { background: #3a2a14; color: #f3e2c2; }
 .badge.forklift { background: #1e2f4a; color: #d7e4f7; }
 .badge.open { background: #efe0b8; color: #6a4b10; }
 .badge.new, .badge.routed { background: #efe0b8; color: #6a4b10; }
@@ -167,7 +172,7 @@ tr.clickable:hover { background: #faf4ea; }
 .badge.quote { background: #e8ddf4; color: #4a2d6b; }
 .badge.void { background: #eadada; color: #6b1518; }
 
-.truck-pick { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.truck-pick { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; }
 .truck-pick label.choice {
   text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--ink);
   border: 1px solid var(--line); border-radius: 12px; padding: 12px; cursor: pointer; background: #fff;
