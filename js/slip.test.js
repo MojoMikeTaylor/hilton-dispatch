@@ -45,7 +45,7 @@ const run = (code) => vm.runInContext(code, ctx);
 run(`
   var __q = HDEngine.quote({ truck: "dump", oneWaySeconds: 1200, billing: Object.assign({}, db.settings.billing, { surchargePercent: 15 }),
     materials: [
-      { id: "a", name: "Topsoil", qty: 3, unit: "yd", price: 25, book: "store" },
+      { name: "Topsoil", qty: 3, unit: "yd", price: 25 },
       { id: "b", name: "Jaw Run", qty: 2, unit: "ton", price: 12.5, book: "quarry" } ],
     forkliftFee: 0, toteFee: 0 });
   var __t = { id: "HD-TEST-1", createdAt: new Date().toISOString(), customer: "Smoke Test Customer",
@@ -170,12 +170,32 @@ const multiHouse = multiHtml.slice(multiHtml.indexOf('<section class="sheet hous
 assert.strictEqual((multiCustomer.match(/class="dispatch-line"/g) || []).length, 2, "customer page prints one dispatch line per load");
 assert.strictEqual((multiHouse.match(/class="dispatch-line"/g) || []).length, 4, "house sheet repeats a dispatch line per load and a billable line per load");
 assert.ok(multiCustomer.includes('data-ticket="HD-MULTI"') && multiHouse.includes('data-ticket="HD-MULTI"'), "dispatch lines stay under the same ticket");
-assert.ok(multiHouse.includes("2 loads · 1 transfer + 1 bobtail"), "house sheet shows the load count and the split");
+assert.ok(multiHouse.includes("2 loads: Transfer 20 + Bobtail 10"), "house sheet shows the load count and the split");
 assert.ok(multiCustomer.includes("Dispatch — Transfer Truck") && multiCustomer.includes("Dispatch — Small Truck 550"), "dispatch lines name the trucks in the split");
 assert.ok(!multiCustomer.includes("Delivery — Dump"), "a multi-load invoice does not collapse the trucks into one delivery row");
 const multiFees = run("HDEngine.money(__multi.loads[0].deliveryFee)") + " " + run("HDEngine.money(__multi.loads[1].deliveryFee)");
 assert.ok(multiCustomer.includes(run("HDEngine.money(__multi.loads[0].deliveryFee)")) && multiCustomer.includes(run("HDEngine.money(__multi.loads[1].deliveryFee)")), "each dispatch line shows its own fee (" + multiFees + ")");
 assert.ok(multiCustomer.includes("Total " + run("HDEngine.money(__multi.total)")), "one invoice total is the summed ticket");
+
+run(`
+  var __rock = HDEngine.quote({
+    truck: "small",
+    oneWaySeconds: 30 * 60,
+    yardId: "cp",
+    billing: db.settings.billing,
+    materials: [{ id: "three-quarter-minus", name: "3/4\\" Minus", qty: 40, unit: "yd", price: 28, book: "store", category: "Rock / yard" }],
+    forkliftFee: 0,
+    toteFee: 0
+  });
+  buildPrint({ id: "HD-ROCK", createdAt: new Date().toISOString(), customer: "Rock Co", address: "40 Yard Rd",
+    yardId: "cp", truck: "small", status: "new", materials: __rock.lines, quote: __rock, route: null });
+`);
+const rockHtml = els["print-root"].innerHTML;
+const rockHouse = rockHtml.slice(rockHtml.indexOf('<section class="sheet house">'));
+const rockCustomer = rockHtml.slice(rockHtml.indexOf('<section class="sheet customer">'), rockHtml.indexOf('<section class="sheet waiver">'));
+assert.ok(rockHouse.includes("2 loads: Transfer 20 + Transfer 20"), "house sheet shows 2 loads: Transfer 20 + Transfer 20");
+assert.strictEqual((rockCustomer.match(/data-ticket="HD-ROCK"/g) || []).length, 2, "40 yd store rock stays one invoice");
+assert.ok(rockCustomer.includes("Total " + run("HDEngine.money(__rock.total)")), "40 yd store rock prints one total");
 
 // South Stage $40 is inside the forklift delivery fee, not its own row. cp does not get it.
 run(`

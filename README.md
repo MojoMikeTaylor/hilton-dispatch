@@ -9,7 +9,7 @@ Crew takes the call, punches the delivery address, picks the loading yard, maps 
 1. Customer calls. Hit **New ticket**.
 2. Name, phone, delivery address, which yard is loading the truck.
 3. Small Truck 550 ($90/hr), Dump ($150/hr), Transfer Truck ($160/hr), or Forklift ($160/hr). The dump-road buffer stays in Settings and applies to dump and transfer trucks.
-4. Most products are **1 load**. Topsoil, Forest Loam, Topsoil Plus, and Willow Creek quarry rock split into bobtail and transfer loads; the delivery fee is the sum. Extra site minutes and extra wait minutes are **0**. Forklift / extra equipment $ defaults to **0**. A forklift leaving 5 South Stage (yard `medford`) includes $40 in the delivery fee. A driver or PO goes in Notes. Fuel surcharge is the percent typed in Settings, applied to the delivery fee only. Diesel price and week-of print as the EIA index.
+4. Store products sold by the yard split into a 20 yd transfer and a 10 yd bobtail. Topsoil stays 12/24, Forest Loam and Topsoil Plus stay 15/30, and Willow Creek stays 10/20. By-the-pound items, flagstone, boulders, and forklift stone stay one load. The delivery fee is the sum, still one invoice. Extra site minutes and extra wait minutes are **0**. Forklift / extra equipment $ defaults to **0**. A forklift leaving 5 South Stage (yard `medford`) includes $40 in the delivery fee. A driver or PO goes in Notes. Fuel surcharge is the percent typed in Settings, applied to the delivery fee only. Diesel price and week-of print as the EIA index.
 5. Search the **active material tab** (Bark/Mulch, Flagstone, Boulders/Aggregates, Willow Creek). Choosing Willow Creek as origin defaults the picker to the Willow Creek tab. Crew can switch tabs on purpose.
 6. **Calculate route** — map draws, delivery fee locks, status becomes Routed.
 7. **Print invoice + route sheet** — page 1 full math for accounting, page 2 driver sheet.
@@ -26,7 +26,7 @@ Printed on every invoice.
 4. Site minutes = load + unload. Extra minutes are 0.
 5. Raw hours = (adjusted road + site) / 60.
 6. Billable hours = max(1 hour, round up to 15 minutes).
-7. Delivery fee = billable hours × $90 Small Truck 550 / $150 dump / $160 transfer / $160 forklift (or admin rates). Forklift from Medford / 5 South Stage adds $40 inside that fee. Eligible multi-load tickets sum one fee per load.
+7. Delivery fee = billable hours × $90 Small Truck 550 / $150 dump / $160 transfer / $160 forklift (or admin rates). Forklift from Medford / 5 South Stage adds $40 inside that fee. Transfer keeps the 8% road buffer. Multi-load tickets sum one fee per load on one invoice.
 8. Materials = qty × book price. Materials are not fuel-surcharged.
 9. Forklift / extra equipment fee = the dollar amount typed on the ticket.
 10. Fuel surcharge = delivery fee × (typed percent / 100). The office types the percent each week. Default is 0. Diesel $/gal and week-of are the EIA West Coast PADD 5 index on the invoice. Pull EIA week updates the price and the date, not the percent.

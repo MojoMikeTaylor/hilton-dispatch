@@ -12,8 +12,9 @@
    6. Billable hours                        = max(minimumHours, ceil to incrementMinutes)
    7. Delivery fee                          = billableHours * ($90 small 550 | $150 dump | $160 transfer | $160 forklift)
                                               Forklift from yard medford (5 South Stage) adds $40 inside this fee.
-                                              Eligible soils and Willow Creek rock may be several loads; the invoice
-                                              delivery fee is the sum. Other products stay one load.
+                                              Named soils, Willow Creek, and store bulk sold by the yard may be
+                                              several loads; the invoice delivery fee is the sum. By-the-pound
+                                              items, flagstone, boulders, and forklift stone stay one load.
    8. Materials                             = Σ qty * unitPrice (once, not once per load)
    9. Forklift / extra fee                  = ticket dollars (default 0). Not the South Stage adder.
   10. Tote / bagging fee                    = ticket dollars typed by hand (default 0)
@@ -104,11 +105,13 @@ window.HDEngine = {
 
   // Bobtail / transfer capacities in yards. Willow Creek rows are priced per ton;
   // the load split uses the quantity number as yards, the same way the desk says "30 yd".
+  // bulk-yard is the default for store products sold by the yard. It is not a product id.
   LOAD_CAPS: {
-    topsoil: { bobtail: 12, transfer: 24 },
-    "forest-loam": { bobtail: 15, transfer: 30 },
-    "topsoil-plus": { bobtail: 15, transfer: 30 },
-    willow: { bobtail: 10, transfer: 20 },
+    topsoil: { bobtail: 12, transfer: 24, pile: "topsoil" },
+    "forest-loam": { bobtail: 15, transfer: 30, pile: "loam" },
+    "topsoil-plus": { bobtail: 15, transfer: 30, pile: "loam" },
+    willow: { bobtail: 10, transfer: 20, pile: "willow" },
+    "bulk-yard": { bobtail: 10, transfer: 20, pile: "bulk-yard" },
   },
 
   normText(s) {
@@ -122,22 +125,47 @@ window.HDEngine = {
   // Store soils by their book id. A lookalike name with a different id is not these soils.
   // Willow Creek quarry rock is the pit book: book willow, source quarry, truckload_only,
   // an id starting with q-, or a Willow Creek category.
+  // Any other store product sold by the yard uses the 20/10 bulk split.
+  // By-the-pound items, flagstone, boulders, and forklift stone do not.
+  isWillow(material) {
+    if (!material) return false;
+    if (material.source === "quarry" || material.truckload_only || material.book === "willow") return true;
+    if (String(material.id || "").indexOf("q-") === 0) return true;
+    return String(material.category || "").indexOf("Willow Creek") >= 0;
+  },
+
+  isBulkYard(material) {
+    if (!material || material.requires_forklift) return false;
+    const unit = this.normText(material.unit);
+    if (unit !== "yd" && unit !== "yard" && unit !== "yards") return false;
+    if (material.book === "flagstone" || material.book === "willow") return false;
+    if (material.source === "quarry" || material.truckload_only) return false;
+    const cat = String(material.category || "");
+    const name = String(material.name || "");
+    if (cat.indexOf("Flagstone") >= 0 || cat.indexOf("Willow Creek") >= 0) return false;
+    if (/boulder/i.test(cat) || /boulder/i.test(name)) return false;
+    // A bare line with no catalog id and no store or aggregates book stays one load
+    // on the selected truck. Named soils without an id are handled above.
+    const book = material.book;
+    if (book === "store" || book === "boulders") return true;
+    return !!String(material.id || "");
+  },
+
   capacityFor(material) {
     if (!material) return null;
     const id = String(material.id || "");
     if (this.LOAD_CAPS[id]) return this.LOAD_CAPS[id];
-    if (material.source === "quarry" || material.truckload_only || material.book === "willow") return this.LOAD_CAPS.willow;
-    if (id.indexOf("q-") === 0) return this.LOAD_CAPS.willow;
-    if (String(material.category || "").indexOf("Willow Creek") >= 0) return this.LOAD_CAPS.willow;
-    if (id) return null;
-    const name = this.normText(material.name);
-    const named = {
-      topsoil: this.LOAD_CAPS.topsoil,
-      "forest loam": this.LOAD_CAPS["forest-loam"],
-      "topsoil plus": this.LOAD_CAPS["topsoil-plus"],
-    };
-    if (!named[name]) return null;
-    if (material.book === "store" || material.category === "Soils") return named[name];
+    if (this.isWillow(material)) return this.LOAD_CAPS.willow;
+    if (!id) {
+      const name = this.normText(material.name);
+      const named = {
+        topsoil: this.LOAD_CAPS.topsoil,
+        "forest loam": this.LOAD_CAPS["forest-loam"],
+        "topsoil plus": this.LOAD_CAPS["topsoil-plus"],
+      };
+      if (named[name] && (material.book === "store" || material.category === "Soils")) return named[name];
+    }
+    if (this.isBulkYard(material)) return this.LOAD_CAPS["bulk-yard"];
     return null;
   },
 
@@ -159,28 +187,40 @@ window.HDEngine = {
     return loads;
   },
 
-  splitLabel(loads) {
-    let transfers = 0;
-    let bobtails = 0;
-    (loads || []).forEach((load) => {
-      if (load.truck === "transfer" || load.kind === "transfer") transfers += 1;
-      else if (load.truck === "small" || load.kind === "bobtail") bobtails += 1;
-    });
-    const parts = [];
-    if (transfers) parts.push(transfers + " transfer" + (transfers === 1 ? "" : "s"));
-    if (bobtails) parts.push(bobtails + " bobtail" + (bobtails === 1 ? "" : "s"));
-    return parts.join(" + ");
+  loadTitle(load) {
+    if (!load) return "Truck";
+    if (load.kind === "bobtail" || load.truck === "small") return "Bobtail";
+    if (load.kind === "transfer" || load.truck === "transfer") return "Transfer";
+    if (load.truck === "forklift") return "Forklift";
+    if (load.truck === "dump") return "Dump";
+    return "Truck";
   },
 
-  // Same capacity class is one pile (all pit rock together, Forest Loam with Topsoil Plus).
-  // A product that is not one of these soils or pit rock does not add a load.
+  yardText(n) {
+    const v = Math.round(Number(n) * 1000) / 1000;
+    if (!isFinite(v)) return "";
+    return String(v);
+  },
+
+  // "Transfer 20 + Bobtail 10" — yards on each load so the board can allot time.
+  splitLabel(loads) {
+    return (loads || []).map((load) => {
+      const title = this.loadTitle(load);
+      if (!load || load.yards == null || load.yards === "") return title;
+      return title + " " + this.yardText(load.yards);
+    }).join(" + ");
+  },
+
+  // Same capacity class is one pile (all pit rock together, Forest Loam with Topsoil Plus,
+  // store by-the-yard bulk together). Pit rock does not pile with store bulk.
+  // By-the-pound items, flagstone, boulders, and forklift stone do not add a load.
   planMaterials(materials, selectedTruck) {
     const groups = new Map();
     const order = [];
     (materials || []).forEach((material) => {
       const cap = this.capacityFor(material);
       if (!cap) return;
-      const key = cap.bobtail + "/" + cap.transfer;
+      const key = cap.pile || (cap.bobtail + "/" + cap.transfer);
       if (!groups.has(key)) {
         groups.set(key, { cap, qty: 0 });
         order.push(key);
@@ -403,7 +443,7 @@ window.HDEngine = {
       ? `total = delivery + materials + forkliftFee + toteFee + fuelSurcharge = ${this.money(preTax)}`
       : `total = delivery + materials + forkliftFee + fuelSurcharge = ${this.money(preTax)}`;
     return [
-      q.planned && q.split ? `Loads: ${q.loadCount} · ${q.split}` : null,
+      q.planned && q.split ? `${q.loadCount} ${q.loadCount === 1 ? "load" : "loads"}: ${q.split}` : null,
       `Mapped one-way drive: ${q.oneWayMin.toFixed(1)} min`,
       `Trip mode: ${tripLabel} → ${q.tripMin.toFixed(1)} min road time`,
       `Drive after buffer${dumpNote}: ${q.adjustedDriveMin.toFixed(1)} min`,
@@ -435,7 +475,7 @@ window.HDEngine = {
       return `Load ${i + 1} of ${q.loads.length}: ${name}${buf}, ${load.billableHours.toFixed(2)} hr @ $${load.rate}/hr = ${this.money(load.deliveryFee)}${stage}`;
     });
     return [
-      `Loads: ${q.loadCount} · ${q.split}`,
+      `${q.loadCount} loads: ${q.split}`,
       `Mapped one-way drive: ${q.oneWayMin.toFixed(1)} min (${tripLabel}, each load)`,
     ].concat(loadLines, [
       `Delivery fee (sum of loads): ${this.money(q.deliveryFee)}`,

@@ -284,8 +284,9 @@ assert(splitOf(30, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 
 assert(splitOf(31, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 27 }) === "T+B", "31 yd forest loam is 1 transfer + 1 bobtail");
 assert(splitOf(45, { id: "topsoil-plus", name: "Topsoil Plus", unit: "yd", price: 34 }) === "T+B", "45 yd topsoil plus is 1 transfer + 1 bobtail");
 assert(splitOf(46, { id: "topsoil-plus", name: "Topsoil Plus", unit: "yd", price: 34 }) === "T+T", "46 yd topsoil plus is 2 transfers");
-assert(splitOf(40, { id: "fresh-fines", name: "Fresh Fines Bark", unit: "yd", price: 34 }, "dump") === "dump", "bark stays one load on the selected truck");
+assert(splitOf(40, { id: "fresh-fines", name: "Fresh Fines Bark", unit: "yd", price: 34, book: "store" }, "dump") === "T+T", "40 yd bark is 2 transfers");
 assert(splitOf(40, { name: "Topsoil", unit: "yd", price: 38 }, "dump") === "dump", "a topsoil line without the store id stays one load");
+assert(splitOf(24, { name: "Topsoil", unit: "yd", price: 38, book: "store" }, "dump") === "T", "topsoil without an id still uses the 24 yd cap when the line is store soil");
 
 const wc30 = E.quote({
   oneWaySeconds: 30 * 60,
@@ -294,7 +295,7 @@ const wc30 = E.quote({
   yardId: "willow",
   materials: [{ ...wc, qty: 30 }],
 });
-assert(wc30.planned && wc30.loadCount === 2 && wc30.split === "1 transfer + 1 bobtail", "30 yd split label");
+assert(wc30.planned && wc30.loadCount === 2 && wc30.split === "Transfer 20 + Bobtail 10", "30 yd split label");
 assert(Math.abs(wc30.loads[0].deliveryFee - 280) < 0.01 && Math.abs(wc30.loads[1].deliveryFee - 135) < 0.01, "transfer $280 and bobtail $135");
 assert(Math.abs(wc30.deliveryFee - 415) < 0.01, "delivery fee is the sum of the load fees");
 assert(Math.abs(wc30.materialsTotal - 375) < 0.01, "material price is charged once");
@@ -305,10 +306,10 @@ assert(lines.length === 2 && lines[0].ticketId === "HD-30" && lines[1].ticketId 
 assert(lines[0].truck === "transfer" && lines[1].truck === "small", "dispatch lines follow the split");
 
 const wc40 = E.quote({ oneWaySeconds: 30 * 60, truck: "small", billing: shop, materials: [{ ...wc, qty: 40 }] });
-assert(wc40.split === "2 transfers" && Math.abs(wc40.deliveryFee - 560) < 0.01, "40 yd is two transfer fees");
+assert(wc40.split === "Transfer 20 + Transfer 20" && Math.abs(wc40.deliveryFee - 560) < 0.01, "40 yd is two transfer fees");
 assert(E.dispatchLines(wc40, "HD-40").length === 2, "40 yd prints two dispatch lines");
 const wc10 = E.quote({ oneWaySeconds: 30 * 60, truck: "transfer", billing: shop, materials: [{ ...wc, qty: 10 }] });
-assert(wc10.loadCount === 1 && wc10.split === "1 bobtail" && wc10.truck === "small", "10 yd is one bobtail even if transfer was selected");
+assert(wc10.loadCount === 1 && wc10.split === "Bobtail 10" && wc10.truck === "small", "10 yd is one bobtail even if transfer was selected");
 assert(E.dispatchLines(wc10, "HD-10").length === 0, "one load stays a single delivery row");
 const ignoredLoads = E.quote({ oneWaySeconds: 30 * 60, truck: "dump", billing: shop, loads: 99, materials: [{ ...wc, qty: 10 }] });
 assert(ignoredLoads.loadCount === 1 && ignoredLoads.truck === "small", "the loads argument does not override the split");
@@ -342,9 +343,122 @@ const mixed = E.quote({
     { id: "fresh-fines", qty: 20, unit: "yd", price: 34 },
   ],
 });
-assert(mixed.loadCount === 1 && mixed.truck === "small", "bark riding with topsoil does not add a load");
+assert(mixed.loadCount === 2 && mixed.loads[0].truck === "small" && mixed.loads[1].truck === "transfer", "bark by the yard is its own load beside topsoil");
 
-// The desk's $1,785 figure needs that job's drive time. Catalog prices alone do not reproduce it, so it is not asserted.
+const rock = { id: "three-quarter-minus", name: "3/4\" Minus", category: "Rock / yard", unit: "yd", price: 28, book: "store" };
+const rock40 = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "small",
+  billing: shop,
+  materials: [{ ...rock, qty: 40 }],
+});
+assert(rock40.planned && rock40.loadCount === 2, "40 yd store rock is 2 loads");
+assert(rock40.loads.every((load) => load.truck === "transfer" && load.yards === 20), "40 yd store rock is 2 transfer loads of 20");
+assert(rock40.split === "Transfer 20 + Transfer 20", "40 yd store rock split is Transfer 20 + Transfer 20");
+assert(rock40.loads.every((load) => load.rate === 160 && Math.abs(load.multiplier - 1.08) < 0.001), "each transfer stays $160 with the 8% buffer");
+assert(Math.abs(rock40.deliveryFee - 560) < 0.01, "40 yd store rock delivery is two transfer fees");
+assert(Math.abs(rock40.materialsTotal - 1120) < 0.01, "40 yd of 3/4 minus at $28 is $1,120");
+assert(Math.abs(rock40.total - 1680) < 0.01, "40 yd store rock at 30 min one-way totals $1,680");
+assert(E.dispatchLines(rock40, "HD-ROCK").length === 2, "40 yd store rock is still one invoice with two dispatch lines");
+assert(E.dispatchLines(rock40, "HD-ROCK").every((line) => line.ticketId === "HD-ROCK"), "both rock loads stay on the same ticket");
+console.log("40-yard store rock: 2 loads: " + rock40.split + " total " + E.money(rock40.total) + " (3/4\" Minus @ $28/yd, 30 min one-way, delivery " + E.money(rock40.deliveryFee) + " + materials " + E.money(rock40.materialsTotal) + ")");
+
+const rock30 = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "dump",
+  billing: shop,
+  materials: [{ ...rock, qty: 30 }],
+});
+assert(rock30.loadCount === 2 && rock30.loads[0].truck === "transfer" && rock30.loads[0].yards === 20, "30 yd store rock starts with a transfer");
+assert(rock30.loads[1].truck === "small" && rock30.loads[1].kind === "bobtail" && rock30.loads[1].yards === 10, "30 yd store rock remainder is a bobtail");
+assert(rock30.split === "Transfer 20 + Bobtail 10", "30 yd store rock is 1 transfer + 1 bobtail");
+assert(rock30.loads[1].rate === 90 && rock30.loads[1].multiplier === 1, "Small Truck 550 stays $90 with no buffer");
+
+const rock10 = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "transfer",
+  billing: shop,
+  materials: [{ ...rock, qty: 10 }],
+});
+assert(rock10.loadCount === 1 && rock10.truck === "small" && rock10.rate === 90, "10 yd store rock selects Small Truck 550 at $90");
+
+assert(splitOf(40, { id: "compost-omri", name: "Compost (OMRI Listed)", category: "Soils", unit: "yd", price: 35, book: "store" }) === "T+T", "other soils use the 20/10 yard split");
+assert(splitOf(24, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }) === "T", "topsoil cap stays 24 yd on one transfer");
+assert(splitOf(30, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 27 }) === "T", "forest loam cap stays 30 yd on one transfer");
+assert(splitOf(30, { id: "topsoil-plus", name: "Topsoil Plus", unit: "yd", price: 34 }) === "T", "topsoil plus cap stays 30 yd on one transfer");
+
+function staysOn(qty, material, truck) {
+  const q = E.quote({
+    oneWaySeconds: 30 * 60,
+    truck,
+    billing: shop,
+    materials: [{ ...material, qty }],
+  });
+  return !q.planned && q.loadCount === 1 && q.truck === truck && q.split === "";
+}
+assert(staysOn(40, { id: "beach-sand", name: "Beach Sand", category: "Rock / lb", unit: "lb", price: 0.10, book: "store" }, "small"), "by-the-pound rock stays one load on Small Truck 550");
+assert(staysOn(40, { id: "boulder-granite", name: "Large Granite Boulders", category: "Boulders / lb", unit: "lb", price: 0.10, book: "store" }, "dump"), "boulders stay one load");
+assert(staysOn(40, { id: "br-b-basalt", name: "Basalt Boulder", category: "Boulders / lb", unit: "lb", price: 0.25, book: "boulders" }, "small"), "boulder-book boulders stay one load");
+assert(staysOn(40, { id: "boulder-yd", name: "Garden Boulder", category: "Boulders", unit: "yd", price: 50, book: "boulders" }, "dump"), "a boulder line sold by the yard does not take the bulk split");
+assert(staysOn(40, { id: "fs-flat-az-roeder", name: "Az Roeder — flat stack", category: "Flagstone / flat stack", unit: "lb", price: 0.20, book: "flagstone", requires_forklift: true }, "forklift"), "flagstone stays one load");
+assert(staysOn(40, { id: "fs-slab-yd", name: "Oregon Rustic slab", category: "Flagstone / slabs", unit: "yd", price: 0.20, book: "flagstone", requires_forklift: true }, "forklift"), "forklift stone does not take the yard split");
+assert(splitOf(40, { id: "br-granite-38", name: "Granite 3/8\"", category: "Granite / yd", unit: "yd", price: 65, book: "boulders" }) === "T+T", "granite sold by the yard uses the bulk split");
+
+const separatePiles = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "dump",
+  billing: shop,
+  materials: [
+    { id: "q-jaw-run", qty: 10, unit: "ton", price: 12.5, book: "willow", source: "quarry" },
+    { ...rock, qty: 10 },
+  ],
+});
+assert(separatePiles.loadCount === 2 && separatePiles.loads.every((load) => load.truck === "small"), "10 yd pit rock and 10 yd store rock are two bobtails");
+const piledRocks = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "dump",
+  billing: shop,
+  materials: [
+    { id: "pea-gravel", name: "Pea Gravel", category: "Rock / yard", qty: 10, unit: "yd", price: 36, book: "store" },
+    { ...rock, qty: 10 },
+  ],
+});
+assert(piledRocks.loadCount === 1 && piledRocks.truck === "transfer", "two store rocks that add to 20 yd are one transfer");
+
+const stageStill = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "forklift",
+  yardId: "medford",
+  billing: shop,
+  materials: [],
+});
+assert(stageStill.southStage === 40 && Math.abs(stageStill.deliveryFee - 280) < 0.01, "South Stage forklift adder stays $40");
+
+// Oct 26 target is $1,785. Catalog yard prices and two $160 transfer loads do not land on it
+// for a one-way drive of 1 to 180 minutes, so the test reports the computed figure.
+const dataCode = fs.readFileSync(path.join(__dirname, "data.js"), "utf8");
+const dataBox = { window: {} };
+vm.createContext(dataBox);
+vm.runInContext(dataCode, dataBox);
+const yardRocks = (dataBox.window.HD_DEFAULTS.materials || []).filter((m) => m.category === "Rock / yard" && m.unit === "yd");
+let closest = null;
+yardRocks.forEach((mat) => {
+  for (let min = 1; min <= 180; min += 0.5) {
+    const q = E.quote({
+      oneWaySeconds: min * 60,
+      truck: "dump",
+      billing: shop,
+      materials: [{ id: mat.id, name: mat.name, category: mat.category, unit: "yd", price: mat.price, qty: 40, book: "store" }],
+    });
+    const gap = Math.abs(q.total - 1785);
+    if (!closest || gap < closest.gap) closest = { gap, total: q.total, min, name: mat.name, price: mat.price, split: q.split, loads: q.loadCount };
+  }
+});
+const oct26 = Math.abs(rock40.total - 1785) < 0.01;
+console.log(oct26
+  ? "Oct 26 $1,785 matches the 30 min 3/4\" Minus quote."
+  : "Oct 26 $1,785 is not reproduced. Computed 40 yd 3/4\" Minus at 30 min one-way is " + E.money(rock40.total) + ". Closest catalog Rock/yard over 1–180 min one-way: " + closest.name + " @ $" + closest.price + "/yd, " + closest.min + " min, " + closest.loads + " loads (" + closest.split + "), total " + E.money(closest.total) + ", gap " + E.money(closest.gap) + ".");
+assert(closest && closest.loads === 2, "catalog store rock still prices as two loads while searching for $1,785");
 
 const dupes = E.duplicateQuotes([
   { id: "Q-LOW", status: "quote", customer: "Ada Lovelace", address: "1 Oak St.", phone: "111", quote: { total: 400 } },

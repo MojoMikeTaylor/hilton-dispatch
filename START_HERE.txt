@@ -12,8 +12,10 @@ HILTON DISPATCH — open this on a yard computer
    Boulders/Aggregates = boulder flyer
    Willow Creek = pit tons only. Selecting Willow Creek as origin opens this tab.
 
-4. Most products are 1 load. Topsoil, Forest Loam, Topsoil Plus, and Willow Creek rock
-   split into bobtail and transfer loads. Extra site minutes and extra wait minutes are 0.
+4. Store products sold by the yard split into a 20 yd transfer and a 10 yd bobtail.
+   Topsoil stays 12/24. Forest Loam and Topsoil Plus stay 15/30. Willow Creek stays 10/20.
+   By-the-pound items, flagstone, boulders, and forklift stone stay one load.
+   Extra site minutes and extra wait minutes are 0.
    Forklift / extra equipment $ defaults to 0.
    A forklift from 5 South Stage includes $40 in the delivery fee.
    Put a driver or PO in Notes if the crew needs it.

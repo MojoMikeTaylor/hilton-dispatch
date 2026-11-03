@@ -1237,10 +1237,16 @@ function defaultRateFor(truck) {
 }
 
 function loadSplitText(q) {
-  if (!q || !q.planned || !q.split) return "";
-  const n = Number(q.loadCount) || (q.loads && q.loads.length) || 0;
+  if (!q || !q.planned) return "";
+  const loads = Array.isArray(q.loads) ? q.loads : [];
+  const n = Number(q.loadCount) || loads.length || 0;
   if (!n) return "";
-  return n + (n === 1 ? " load" : " loads") + " · " + q.split;
+  const fromLoads = loads.length && loads.every((load) => load && load.yards != null && load.yards !== "");
+  const detail = fromLoads
+    ? loads.map((load) => HDEngine.loadTitle(load) + " " + HDEngine.yardText(load.yards)).join(" + ")
+    : (q.split || "");
+  if (!detail) return "";
+  return n + (n === 1 ? " load: " : " loads: ") + detail;
 }
 
 function deliveryDispatchRows(ticket, q) {

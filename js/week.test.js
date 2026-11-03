@@ -165,15 +165,15 @@ assert.strictEqual(sheetId(qHouse), "HD-WEEK-9");
 run(`
   db.jobs = [
     { id: "MULTI", status: "new", customer: "Nick Job", yardId: "willow", truck: "transfer", deliverOn: "2026-10-20T08:15",
-      quote: { planned: true, loadCount: 2, split: "1 transfer + 1 bobtail", total: 1785, loads: [{ truck: "transfer" }, { truck: "small" }] } }
+      quote: { planned: true, loadCount: 2, split: "Transfer 20 + Transfer 20", total: 1785, loads: [{ truck: "transfer", kind: "transfer", yards: 20 }, { truck: "transfer", kind: "transfer", yards: 20 }] } }
   ];
   state.boardView = "week";
   state.filter = "";
   renderBoard();
 `);
-assert.ok(els["job-table"].innerHTML.includes("2 loads · 1 transfer + 1 bobtail"), "week board shows the load count and the split");
+assert.ok(els["job-table"].innerHTML.includes("2 loads: Transfer 20 + Transfer 20"), "week board shows the load count and the split");
 run(`state.boardView = "live"; renderBoard();`);
-assert.ok(els["job-table"].innerHTML.includes("2 loads · 1 transfer + 1 bobtail"), "live board shows the load count and the split");
+assert.ok(els["job-table"].innerHTML.includes("2 loads: Transfer 20 + Transfer 20"), "live board shows the load count and the split");
 
 const upgraded = json(`(function () {
   var store = normalizeStore({
