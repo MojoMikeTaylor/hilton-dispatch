@@ -91,7 +91,14 @@ assert(row("Blue Ridge 3/4\"").price === 50, "Blue Ridge 3/4 is $50/yd");
 assert(row("Blue Ridge 3/4\" minus").price === 50, "Blue Ridge 3/4 minus is $50/yd");
 assert(row("Ivans Gold 3/4\"").price === 0.18 && row("Ivans Gold 3/4\"").unit === "lb", "Ivans Gold 3/4 is $0.18/lb");
 assert(row("Ivans Gold 1 1/2\"").price === 0.18, "Ivans Gold 1 1/2 is $0.18/lb");
-assert(store.find((m) => m.id === "black-cinder").price === 78, "Black Cinder stays");
+assert(!store.some((m) => m.id === "black-cinder"), "unsized Black Cinder is retired");
+assert(store.find((m) => m.id === "black-cinder-34").price === 78 && store.find((m) => m.id === "black-cinder-34").name === "Black Cinder 3/4\"", "Black Cinder 3/4 is $78/yd");
+assert(store.find((m) => m.id === "black-cinder-112").price === 95 && store.find((m) => m.id === "black-cinder-112").name.indexOf("1 1/2") >= 0, "Black Cinder 1 1/2 is $95/yd");
+assert(store.find((m) => m.id === "pea-gravel").name === "3/8 Pea Gravel", "pea gravel shows the size");
+assert(store.find((m) => m.id === "topsoil").transferPrice === 16, "topsoil transfer-only price is $16");
+assert(store.find((m) => m.id === "forest-loam").transferPrice === 20, "forest loam transfer-only price is $20");
+assert(store.find((m) => m.id === "topsoil-plus").transferPrice === 26 && store.find((m) => m.id === "topsoil-plus").price === 34, "topsoil plus POS stays $34 and transfer-only is $26");
+assert(willow.find((m) => m.id === "q-fill-dirt-dump").price === 6, "fill dirt dump fee is $6/ton");
 assert(store.find((m) => m.id === "boulder-blue-ridge").price === 0.18, "Blue Ridge boulders stay on the store book");
 assert(!D.materials.some((m) => /baja|wall block|fabric|tie/i.test(m.name)), "no unpriced Baja, wall block, fabric, or ties");
 
@@ -121,7 +128,39 @@ assert(dropped.find((m) => m.id === "red-cinder-112").price === 40, "reload uses
 assert(dropped.find((m) => m.id === "sku-custom").price === 12, "reload still keeps custom rows");
 
 const published = C.publishedSheet();
-assert(published.length === D.materials.length, "published sheet is the Aug 26 book");
+assert(published.length === D.materials.length, "published sheet is the current book");
+const bouldersBook = D.materials.filter((m) => C.inBook(m, "boulders"));
+["Pami Pebble 3/4\"", "Pami Pebble 1 1/2\"", "Mexi Black 1/2 - 1\"", "Mexi Mix 3/8\"", "Sierra Desert 3/4\"", "Sierra Desert 1 1/2\"", "Salt & Pepper 3/8\"", "Salt & Pepper 1 1/2\""].forEach((name) => {
+  assert(bouldersBook.some((m) => m.name === name), "sized POS row is on the book: " + name);
+});
+["pami-pebble", "mexi-pebble", "mexi-buttons", "salt-pepper", "sierra-desert", "aspen-mountain", "br-color-pami", "br-color-mexi-pebble"].forEach((id) => {
+  assert(!D.materials.some((m) => m.id === id), "unsized generic is not a pick row: " + id);
+});
+const sizedTicket = bouldersBook.find((m) => m.id === "pami-pebble-34");
+assert(sizedTicket.name.indexOf("3/4") >= 0, "Pami ticket name carries the size");
+const fromGeneric = C.mergeMissing([
+  { id: "pami-pebble", name: "Pami Pebble", category: "Rock / lb", unit: "lb", price: 0.16, book: "store" },
+  { id: "salt-pepper", name: "Salt & Pepper", category: "Rock / lb", unit: "lb", price: 0.12, book: "store" },
+  { id: "q-fill-dirt-dump", name: "Fill Dirt Dump Fee", category: "Willow Creek quarry", unit: "ton", price: 4, book: "willow" },
+  { id: "topsoil", name: "Topsoil", category: "Soils", unit: "yd", price: 99, book: "store" },
+  { id: "sku-job-note", name: "Do not touch jobs", category: "Custom", unit: "yd", price: 1, book: "store" },
+]);
+assert(!fromGeneric.some((m) => m.id === "pami-pebble"), "merge retires the unsized Pami row");
+assert(fromGeneric.find((m) => m.id === "pami-pebble-34").name === "Pami Pebble 3/4\"", "merge installs the sized Pami name");
+assert(fromGeneric.find((m) => m.id === "pami-pebble-34").price === 0.16, "merge keeps the Pami price on the sized rows");
+assert(fromGeneric.find((m) => m.id === "salt-pepper-112").name.indexOf("1 1/2") >= 0, "merge installs sized Salt & Pepper");
+assert(fromGeneric.find((m) => m.id === "q-fill-dirt-dump").price === 6, "merge corrects fill dirt from $4/ton to $6/ton");
+assert(fromGeneric.find((m) => m.id === "topsoil").price === 99, "merge still keeps a punched POS price");
+assert(fromGeneric.find((m) => m.id === "sku-job-note").price === 1, "merge keeps rows it does not know");
+const punchedFill = C.mergeMissing([
+  { id: "q-fill-dirt-dump", name: "Fill Dirt Dump Fee", unit: "ton", price: 7, book: "willow" },
+]);
+assert(punchedFill.find((m) => m.id === "q-fill-dirt-dump").price === 7, "a punched fill dirt price other than $4 stays");
+const blackSplit = C.mergeMissing([
+  { id: "black-cinder", name: "Black Cinder", category: "Rock / yard", unit: "yd", price: 78, book: "store" },
+]);
+assert(blackSplit.find((m) => m.id === "black-cinder-112").price === 95, "unsized Black Cinder at the old $78 does not overwrite the $95 size");
+assert(blackSplit.find((m) => m.id === "black-cinder-34").price === 78, "Black Cinder 3/4 keeps $78");
 assert(!published.some((m) => m.id === "sku-custom"), "published sheet drops added rows");
 published[0].price = 1;
 assert(D.materials[0].price !== 1, "published sheet is a copy");

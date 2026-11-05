@@ -171,6 +171,9 @@ assert.strictEqual((multiCustomer.match(/class="dispatch-line"/g) || []).length,
 assert.strictEqual((multiHouse.match(/class="dispatch-line"/g) || []).length, 4, "house sheet repeats a dispatch line per load and a billable line per load");
 assert.ok(multiCustomer.includes('data-ticket="HD-MULTI"') && multiHouse.includes('data-ticket="HD-MULTI"'), "dispatch lines stay under the same ticket");
 assert.ok(multiHouse.includes("2 loads: Transfer 20 + Bobtail 10"), "house sheet shows the load count and the split");
+assert.ok(multiCustomer.includes("Environmental fee (Willow Creek)"), "Willow Creek environmental fee is on the receipt");
+assert.ok(multiCustomer.includes("$1.30/yd"), "Willow Creek material fuel is shown as $1.30/yd");
+assert.ok(multiCustomer.includes("<td>tote bagging, spread, additional service</td><td></td>"), "blank tote line prints with no amount");
 assert.ok(multiCustomer.includes("Dispatch — Transfer Truck") && multiCustomer.includes("Dispatch — Small Truck 550"), "dispatch lines name the trucks in the split");
 assert.ok(!multiCustomer.includes("Delivery — Dump"), "a multi-load invoice does not collapse the trucks into one delivery row");
 const multiFees = run("HDEngine.money(__multi.loads[0].deliveryFee)") + " " + run("HDEngine.money(__multi.loads[1].deliveryFee)");
@@ -196,6 +199,58 @@ const rockCustomer = rockHtml.slice(rockHtml.indexOf('<section class="sheet cust
 assert.ok(rockHouse.includes("2 loads: Transfer 20 + Transfer 20"), "house sheet shows 2 loads: Transfer 20 + Transfer 20");
 assert.strictEqual((rockCustomer.match(/data-ticket="HD-ROCK"/g) || []).length, 2, "40 yd store rock stays one invoice");
 assert.ok(rockCustomer.includes("Total " + run("HDEngine.money(__rock.total)")), "40 yd store rock prints one total");
+
+run(`
+  var __r30 = HDEngine.quote({
+    truck: "dump", oneWaySeconds: 30 * 60, yardId: "cp", billing: db.settings.billing,
+    materials: [{ id: "three-quarter-minus", name: "3/4\\" Minus", qty: 30, unit: "yd", price: 28, book: "store", category: "Rock / yard" }],
+    forkliftFee: 0, toteFee: null
+  });
+  buildPrint({ id: "HD-R30", createdAt: new Date().toISOString(), customer: "Thirty Rock", address: "30 Yard Rd",
+    yardId: "cp", truck: "dump", status: "new", materials: __r30.lines, quote: __r30, route: null });
+`);
+const r30 = els["print-root"].innerHTML;
+const r30House = r30.slice(r30.indexOf('<section class="sheet house">'));
+const r30Customer = r30.slice(r30.indexOf('<section class="sheet customer">'), r30.indexOf('<section class="sheet waiver">'));
+assert.ok(r30House.includes("2 loads: Transfer 20 + Dump 10"), "house sheet shows 30 yd rock as 1 transfer + 1 dump");
+assert.ok(r30Customer.includes("2 loads: Transfer 20 + Dump 10") || r30Customer.includes("Dispatch — Transfer Truck") && r30Customer.includes("Dispatch — Dump"), "customer receipt shows both trucks");
+assert.strictEqual((r30Customer.match(/data-ticket="HD-R30"/g) || []).length, 2, "30 yd rock is one invoice");
+assert.ok(r30Customer.includes("Total " + run("HDEngine.money(__r30.total)")), "30 yd rock prints one total");
+assert.ok(!r30Customer.includes("Transfer 20 + Transfer 20"), "30 yd rock is not two transfers");
+
+run(`
+  var __s30 = HDEngine.quote({
+    truck: "dump", oneWaySeconds: 30 * 60, yardId: "cp", billing: db.settings.billing,
+    materials: [{ id: "topsoil", name: "Topsoil", qty: 30, unit: "yd", price: 25, book: "store", category: "Soils" }],
+    toteFee: ""
+  });
+  buildPrint({ id: "HD-S30", createdAt: new Date().toISOString(), customer: "Thirty Soil", address: "30 Soil Rd",
+    yardId: "cp", truck: "dump", status: "new", materials: __s30.lines, quote: __s30, route: null });
+`);
+const s30 = els["print-root"].innerHTML;
+const s30House = s30.slice(s30.indexOf('<section class="sheet house">'));
+const s30Customer = s30.slice(s30.indexOf('<section class="sheet customer">'), s30.indexOf('<section class="sheet waiver">'));
+assert.ok(s30House.includes("2 loads: Transfer 24 + Dump 6"), "house sheet shows 30 yd topsoil as transfer 24 plus the remainder");
+assert.ok(s30Customer.includes("Total " + run("HDEngine.money(__s30.total)")), "30 yd topsoil is one invoice");
+assert.ok(s30Customer.includes("<td>tote bagging, spread, additional service</td><td></td>"), "tote line is blank when unset");
+assert.ok(!s30Customer.includes("Spreading") && !s30.includes("spread fee"), "spreading is not its own fee");
+
+run(`
+  var __sized = db.settings.materials.find(function (m) { return m.id === "sierra-desert-34"; });
+  buildPrint({ id: "HD-SIZE", createdAt: new Date().toISOString(), customer: "Sized Rock", address: "1 Size St",
+    yardId: "cp", truck: "small", status: "new",
+    materials: [{ id: __sized.id, name: __sized.name, qty: 500, unit: "lb", price: __sized.price }],
+    quote: HDEngine.quote({ truck: "small", oneWaySeconds: 600, billing: db.settings.billing, materials: [{ id: __sized.id, name: __sized.name, qty: 500, unit: "lb", price: __sized.price, book: "boulders" }], toteFee: null })
+  });
+`);
+const sizedHtml = els["print-root"].innerHTML;
+assert.ok(sizedHtml.includes("Sierra Desert 3/4\""), "sized material name prints on the ticket");
+const pami = run(`db.settings.materials.find(function (m) { return m.id === "pami-pebble-34"; }).name`);
+const mexi = run(`db.settings.materials.find(function (m) { return m.id === "mexi-black-12-1"; }).name`);
+const salt = run(`db.settings.materials.find(function (m) { return m.id === "salt-pepper-38"; }).name`);
+assert.strictEqual(pami, "Pami Pebble 3/4\"");
+assert.strictEqual(mexi, "Mexi Black 1/2 - 1\"");
+assert.strictEqual(salt, "Salt & Pepper 3/8\"");
 
 // South Stage $40 is inside the forklift delivery fee, not its own row. cp does not get it.
 run(`

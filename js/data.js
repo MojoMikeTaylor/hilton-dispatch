@@ -1,7 +1,9 @@
-/* Hilton Dispatch — yards, rates, and the 2026 store price sheet.
-   Source: Store Price Sheet 2026.xlsx dated 2026-08-26.
-   Decorative rock / boulders on that sheet are priced per pound. Bark, soils, and
-   most aggregates are per yard. Quarry and flagstone seed at $0. Edit in Material Book — it saves on the server. */
+/* Hilton Dispatch — yards, rates, and the materials book.
+   Store prices: Store Price Sheet 2026 (2026-08-26) plus Olivia Oct 31 sized POS rows.
+   2026-11-05 ops call: class truck caps live in the engine, transfer-only soil prices
+   sit on the three soil rows, Willow Creek fill dirt is $6/ton, and the fee lines
+   (tote bagging / spread / additional service, $5 env per WC load, $1/ton WC fuel)
+   are not material prices. Decorative rock is priced per pound. Quarry stays tons. */
 
 window.HD_DEFAULTS = {
   company: {
@@ -85,9 +87,9 @@ window.HD_DEFAULTS = {
     { id: "aged-sawdust", name: "Aged Sawdust", category: "Sawdust", unit: "yd", price: 30 },
     { id: "horse-bedding", name: "Horse Bedding", category: "Sawdust", unit: "yd", price: 15 },
 
-    { id: "topsoil", name: "Topsoil", category: "Soils", unit: "yd", price: 25 },
-    { id: "forest-loam", name: "Forest Loam", category: "Soils", unit: "yd", price: 27 },
-    { id: "topsoil-plus", name: "Topsoil Plus", category: "Soils", unit: "yd", price: 34 },
+    { id: "topsoil", name: "Topsoil", category: "Soils", unit: "yd", price: 25, transferPrice: 16 },
+    { id: "forest-loam", name: "Forest Loam", category: "Soils", unit: "yd", price: 27, transferPrice: 20 },
+    { id: "topsoil-plus", name: "Topsoil Plus", category: "Soils", unit: "yd", price: 34, transferPrice: 26 },
     { id: "compost-omri", name: "Compost (OMRI Listed)", category: "Soils", unit: "yd", price: 35 },
     { id: "compost-plus", name: "Compost Plus", category: "Soils", unit: "yd", price: 38 },
     { id: "ground-compost", name: "Ground Compost", category: "Soils", unit: "yd", price: 40 },
@@ -102,10 +104,13 @@ window.HD_DEFAULTS = {
     { id: "worm-castings", name: "Worm Castings", category: "Soils", unit: "yd", price: 375 },
 
     { id: "red-cinder-112", name: "Red Cinder 1 1/2\"", category: "Rock / yard", unit: "yd", price: 40 },
+    { id: "red-cinder-34", name: "Red Cinder 3/4\"", category: "Rock / yard", unit: "yd", price: 40 },
+    { id: "red-cinder-fines", name: "Red Cinder Fines", category: "Rock / yard", unit: "yd", price: 40 },
     { id: "red-cinder-38-minus", name: "Red Cinder 3/8\" minus", category: "Rock / yard", unit: "yd", price: 40 },
-    { id: "black-cinder", name: "Black Cinder", category: "Rock / yard", unit: "yd", price: 78 },
+    { id: "black-cinder-112", name: "Black Cinder 1 1/2\"", category: "Rock / yard", unit: "yd", price: 95 },
+    { id: "black-cinder-34", name: "Black Cinder 3/4\"", category: "Rock / yard", unit: "yd", price: 78 },
     { id: "fill-sand", name: "Fill Sand", category: "Rock / yard", unit: "yd", price: 48 },
-    { id: "pea-gravel", name: "Pea Gravel", category: "Rock / yard", unit: "yd", price: 36 },
+    { id: "pea-gravel", name: "3/8 Pea Gravel", category: "Rock / yard", unit: "yd", price: 36 },
     { id: "round-drain-34", name: "3/4\" Round drain", category: "Rock / yard", unit: "yd", price: 36 },
     { id: "drain-112", name: "1 1/2\" Drain", category: "Rock / yard", unit: "yd", price: 36 },
     { id: "quarter-10", name: "1/4\" x #10", category: "Rock / yard", unit: "yd", price: 46 },
@@ -125,18 +130,10 @@ window.HD_DEFAULTS = {
 
     { id: "beach-sand", name: "Beach Sand", category: "Rock / lb", unit: "lb", price: 0.10 },
     { id: "river-cobble", name: "River Cobblestone", category: "Rock / lb", unit: "lb", price: 0.10 },
-    { id: "salt-pepper", name: "Salt & Pepper", category: "Rock / lb", unit: "lb", price: 0.12 },
-    { id: "aspen-mountain", name: "Aspen Mountain", category: "Rock / lb", unit: "lb", price: 0.14 },
-    { id: "sierra-desert", name: "Sierra Desert", category: "Rock / lb", unit: "lb", price: 0.14 },
     { id: "dolomite", name: "Dolomite 1 1/2\"–3\"", category: "Rock / lb", unit: "lb", price: 0.45 },
-    { id: "pami-pebble", name: "Pami Pebble", category: "Rock / lb", unit: "lb", price: 0.16 },
     { id: "white-silica", name: "White Silica", category: "Rock / lb", unit: "lb", price: 0.18 },
-    { id: "jade-green", name: "Jade Green", category: "Rock / lb", unit: "lb", price: 0.20 },
-    { id: "palm-desert", name: "Palm Desert Gold", category: "Rock / lb", unit: "lb", price: 0.30 },
     { id: "ivans-gold-34", name: "Ivans Gold 3/4\"", category: "Rock / lb", unit: "lb", price: 0.18 },
     { id: "ivans-gold-112", name: "Ivans Gold 1 1/2\"", category: "Rock / lb", unit: "lb", price: 0.18 },
-    { id: "mexi-pebble", name: "Mexi Pebble", category: "Rock / lb", unit: "lb", price: 0.30 },
-    { id: "mexi-buttons", name: "Mexi Buttons", category: "Rock / lb", unit: "lb", price: 0.55 },
 
     { id: "boulder-granite", name: "Large Granite Boulders", category: "Boulders / lb", unit: "lb", price: 0.10 },
     { id: "boulder-moss", name: "Moss Rock Boulders", category: "Boulders / lb", unit: "lb", price: 0.15 },
@@ -256,13 +253,53 @@ window.HD_DEFAULTS = {
 
     { id: "br-color-blueridge", name: "Blueridge", category: "Colored rock", unit: "yd", price: 50, book: "boulders" },
     { id: "br-color-jade-crushed", name: "Jade Green crushed", category: "Colored rock", unit: "lb", price: 0.20, book: "boulders" },
-    { id: "br-color-mexi-pebble", name: "Mexi Pebble", category: "Colored rock", unit: "lb", price: 0.30, book: "boulders" },
-    { id: "br-color-mexi-buttons", name: "Mexi Buttons", category: "Colored rock", unit: "lb", price: 0.55, book: "boulders" },
-    { id: "br-color-aspen", name: "Aspen Mountain", category: "Colored rock", unit: "lb", price: 0.14, book: "boulders" },
-    { id: "br-color-pami", name: "Pami", category: "Colored rock", unit: "lb", price: 0.16, book: "boulders" },
     { id: "br-color-white-silica", name: "White Silica", category: "Colored rock", unit: "lb", price: 0.18, book: "boulders" },
     { id: "br-color-sierra-purple", name: "Sierra Moonlight Purple rock", category: "Colored rock", unit: "lb", price: 0.15, book: "boulders" },
-    { id: "br-color-palm-desert", name: "Palm Desert Gold rock", category: "Colored rock", unit: "lb", price: 0.30, book: "boulders" },
+
+    { id: "mexi-black-1-2", name: "Mexi Black 1' - 2\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-black-12-1", name: "Mexi Black 1/2 - 1\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-black-2-3", name: "Mexi Black 2\" - 3\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-black-3-5", name: "Mexi Black 3\" - 5\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-black-6-9", name: "Mexi Black 6\" - 9\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-black-buttons", name: "Mexi Black Buttons", category: "Mexi/deco", unit: "lb", price: 0.55, book: "boulders" },
+    { id: "mexi-buff-1-2", name: "Mexi Buff 1\" - 2\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-buff-12-1", name: "Mexi Buff 1/2\"-1\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-buff-2-3", name: "Mexi Buff 2\" - 3\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-buff-buttons", name: "Mexi Buff Buttons", category: "Mexi/deco", unit: "lb", price: 0.55, book: "boulders" },
+    { id: "mexi-cariba", name: "Mexi Cariba", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-mix-1-2", name: "Mexi Mix 1\" - 2\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-mix-12-1", name: "Mexi Mix 1/2 - 1\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-mix-14-12", name: "Mexi Mix 1/4 - 1/2", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-mix-3-5", name: "Mexi Mix 3\" - 5\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-mix-38", name: "Mexi Mix 3/8\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-mix-buttons", name: "Mexi Mix Buttons", category: "Mexi/deco", unit: "lb", price: 0.55, book: "boulders" },
+    { id: "mexi-red-black-1-3", name: "Mexi Red & Black 1\" - 3\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-red-1-2", name: "Mexi Red 1\" - 2\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-red-12-1", name: "Mexi Red 1/2 - 1\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-red-2-3", name: "Mexi Red 2\" - 3\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "mexi-red-3-5", name: "Mexi Red 3\" -5\"", category: "Mexi/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "pami-pebble-112", name: "Pami Pebble 1 1/2\"", category: "Pami/deco", unit: "lb", price: 0.16, book: "boulders" },
+    { id: "pami-pebble-3", name: "Pami Pebble 3\"", category: "Pami/deco", unit: "lb", price: 0.16, book: "boulders" },
+    { id: "pami-pebble-34", name: "Pami Pebble 3/4\"", category: "Pami/deco", unit: "lb", price: 0.16, book: "boulders" },
+    { id: "pami-pebble-12", name: "Pami Pebble 1/2\"", category: "Pami/deco", unit: "lb", price: 0.16, book: "boulders" },
+    { id: "pami-pebble-38", name: "Pami Pebble 3/8\"", category: "Pami/deco", unit: "lb", price: 0.16, book: "boulders" },
+    { id: "pami-pebble-14", name: "Pami Pebble 1/4\"", category: "Pami/deco", unit: "lb", price: 0.16, book: "boulders" },
+    { id: "pami-fractured-34", name: "Pami Fractured 3/4\"", category: "Pami/deco", unit: "lb", price: 0.16, book: "boulders" },
+    { id: "pami-fractured-38", name: "Pami Fractured 3/8\"", category: "Pami/deco", unit: "lb", price: 0.16, book: "boulders" },
+    { id: "aspen-mountain-112", name: "Aspen Mountain 1 1/2\"", category: "Rock/deco", unit: "lb", price: 0.14, book: "boulders" },
+    { id: "aspen-mountain-34", name: "Aspen Mountain 3/4\"", category: "Rock/deco", unit: "lb", price: 0.14, book: "boulders" },
+    { id: "jade-34", name: "Jade 3/4\"", category: "Rock/deco", unit: "lb", price: 0.20, book: "boulders" },
+    { id: "jade-112", name: "Jade 1 1/2\"", category: "Rock/deco", unit: "lb", price: 0.20, book: "boulders" },
+    { id: "palm-desert-34", name: "Palm Desert Gold 3/4\"", category: "Rock/deco", unit: "lb", price: 0.30, book: "boulders" },
+    { id: "salt-pepper-38", name: "Salt & Pepper 3/8\"", category: "Rock/deco", unit: "lb", price: 0.12, book: "boulders" },
+    { id: "salt-pepper-112", name: "Salt & Pepper 1 1/2\"", category: "Rock/deco", unit: "lb", price: 0.12, book: "boulders" },
+    { id: "sierra-desert-34", name: "Sierra Desert 3/4\"", category: "Rock/deco", unit: "lb", price: 0.14, book: "boulders" },
+    { id: "sierra-desert-112", name: "Sierra Desert 1 1/2\"", category: "Rock/deco", unit: "lb", price: 0.14, book: "boulders" },
+    { id: "black-lychen", name: "Black Lychen", category: "Rock/deco", unit: "lb", price: 0.20, book: "boulders" },
+    { id: "cold-water-canyon", name: "Cold Water Canyon", category: "Rock/deco", unit: "lb", price: 0.26, book: "boulders" },
+    { id: "moss-rock-head", name: "Moss Rock Head", category: "Rock/deco", unit: "lb", price: 0.15, book: "boulders" },
+    { id: "moss-rock-double-head", name: "Moss Rock Double Head", category: "Rock/deco", unit: "lb", price: 0.15, book: "boulders" },
+    { id: "moss-rock-doll-head", name: "Moss Rock Doll Head", category: "Rock/deco", unit: "lb", price: 0.15, book: "boulders" },
 
     { id: "q-dg-38-gold", name: "Decomposed Granite 3/8 Minus Gold Decorative", category: "Willow Creek quarry", unit: "ton", price: 35, book: "willow", source: "quarry", truckload_only: true },
     { id: "q-dg-34-gold", name: "Decomposed Granite 3/4 Minus Gold", category: "Willow Creek quarry", unit: "ton", price: 13.50, book: "willow", source: "quarry", truckload_only: true },
@@ -279,7 +316,7 @@ window.HD_DEFAULTS = {
     { id: "q-rip-rap", name: "Rip Rap (loaded with loader)", category: "Willow Creek quarry", unit: "ton", price: 25, book: "willow", source: "quarry", truckload_only: true },
     { id: "q-deco-rip-rap", name: "Deco Rip Rap (loaded with excavator) — Call Mike Taylor", category: "Willow Creek quarry", unit: "ton", price: 0, book: "willow", source: "quarry", truckload_only: true, special: true, note: "Special / Call Mike Taylor" },
     { id: "q-crushed-asphalt", name: "Crushed Asphalt", category: "Willow Creek quarry", unit: "ton", price: 20, book: "willow", source: "quarry", truckload_only: true, note: "Call for availability" },
-    { id: "q-fill-dirt-dump", name: "Fill Dirt Dump Fee", category: "Willow Creek quarry", unit: "ton", price: 4, book: "willow", source: "quarry", truckload_only: true },
+    { id: "q-fill-dirt-dump", name: "Fill Dirt Dump Fee", category: "Willow Creek quarry", unit: "ton", price: 6, book: "willow", source: "quarry", truckload_only: true },
   ],
   weights: { rock: 2500, sand: 2600, bark: 900, cinder: 1500 },
 };
@@ -321,6 +358,20 @@ window.HDCatalog = {
     { fromId: "clean-granite", childIds: ["clean-granite-112", "clean-granite-34"] },
     { fromId: "blue-ridge-yd", childIds: ["blue-ridge-112", "blue-ridge-34", "blue-ridge-34-minus"] },
     { fromId: "ivans-gold", childIds: ["ivans-gold-34", "ivans-gold-112"] },
+    { fromId: "black-cinder", childIds: ["black-cinder-112", "black-cinder-34"], keepDraftPrices: true, oldPrice: 78 },
+    { fromId: "pami-pebble", childIds: ["pami-pebble-112", "pami-pebble-3", "pami-pebble-34", "pami-pebble-12", "pami-pebble-38", "pami-pebble-14", "pami-fractured-34", "pami-fractured-38"] },
+    { fromId: "br-color-pami", childIds: ["pami-pebble-112", "pami-pebble-3", "pami-pebble-34", "pami-pebble-12", "pami-pebble-38", "pami-pebble-14", "pami-fractured-34", "pami-fractured-38"] },
+    { fromId: "mexi-pebble", childIds: ["mexi-black-1-2", "mexi-black-12-1", "mexi-black-2-3", "mexi-black-3-5", "mexi-black-6-9", "mexi-buff-1-2", "mexi-buff-12-1", "mexi-buff-2-3", "mexi-cariba", "mexi-mix-1-2", "mexi-mix-12-1", "mexi-mix-14-12", "mexi-mix-3-5", "mexi-mix-38", "mexi-red-black-1-3", "mexi-red-1-2", "mexi-red-12-1", "mexi-red-2-3", "mexi-red-3-5"] },
+    { fromId: "br-color-mexi-pebble", childIds: ["mexi-black-1-2", "mexi-black-12-1", "mexi-black-2-3", "mexi-black-3-5", "mexi-black-6-9", "mexi-buff-1-2", "mexi-buff-12-1", "mexi-buff-2-3", "mexi-cariba", "mexi-mix-1-2", "mexi-mix-12-1", "mexi-mix-14-12", "mexi-mix-3-5", "mexi-mix-38", "mexi-red-black-1-3", "mexi-red-1-2", "mexi-red-12-1", "mexi-red-2-3", "mexi-red-3-5"] },
+    { fromId: "mexi-buttons", childIds: ["mexi-black-buttons", "mexi-buff-buttons", "mexi-mix-buttons"] },
+    { fromId: "br-color-mexi-buttons", childIds: ["mexi-black-buttons", "mexi-buff-buttons", "mexi-mix-buttons"] },
+    { fromId: "salt-pepper", childIds: ["salt-pepper-38", "salt-pepper-112"] },
+    { fromId: "aspen-mountain", childIds: ["aspen-mountain-112", "aspen-mountain-34"] },
+    { fromId: "br-color-aspen", childIds: ["aspen-mountain-112", "aspen-mountain-34"] },
+    { fromId: "sierra-desert", childIds: ["sierra-desert-34", "sierra-desert-112"] },
+    { fromId: "jade-green", childIds: ["jade-34", "jade-112"] },
+    { fromId: "palm-desert", childIds: ["palm-desert-34"] },
+    { fromId: "br-color-palm-desert", childIds: ["palm-desert-34"] },
   ],
   splitCombinedSizes(existing) {
     const splits = this.sizeSplits || [];
@@ -343,7 +394,8 @@ window.HDCatalog = {
         const def = defs.get(id);
         if (!def) return;
         const row = JSON.parse(JSON.stringify(def));
-        if (isFinite(price)) row.price = price;
+        const keepDraft = spec.keepDraftPrices && price === spec.oldPrice;
+        if (isFinite(price) && !keepDraft) row.price = price;
         present.add(id);
         out.push(row);
       });
@@ -362,6 +414,8 @@ window.HDCatalog = {
       }
       const row = { ...prev, ...def };
       if (Number(prev.price) > 0) row.price = prev.price;
+      // The old book shipped fill dirt at $4/ton. That figure was the default, not a punched rate.
+      if (def.id === "q-fill-dirt-dump" && Number(prev.price) === 4) row.price = def.price;
       row.book = def.book || this.bookOf(prev);
       out.push(row);
       have.delete(def.id);

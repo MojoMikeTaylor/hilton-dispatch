@@ -71,7 +71,7 @@ function blankDraft() {
     extraSiteMinutes: 0,
     extraWaitMinutes: 0,
     forkliftFee: 0,
-    toteFee: 0,
+    toteFee: null,
     rateOverride: null,
     adminRate: false,
     deliverOn: when.toISOString().slice(0, 16),
@@ -1401,8 +1401,14 @@ function renderMaterialLines() {
     wrap.innerHTML = `<div class="empty">No materials yet. Search the book and add yards / tons / pallets.</div>`;
     return;
   }
+  let quoted = [];
+  try { quoted = (currentQuote().lines) || []; } catch (e) { quoted = []; }
   wrap.innerHTML = `<table><thead><tr><th>Material</th><th>Qty</th><th>Unit</th><th>Price</th><th>Amount</th><th></th></tr></thead><tbody>
-    ${state.draft.materials.map((m, i) => `
+    ${state.draft.materials.map((m, i) => {
+      const qLine = quoted[i];
+      const amount = qLine ? qLine.amount : (Number(m.qty) || 0) * (Number(m.price) || 0);
+      const basis = qLine && qLine.transferOnly ? `<div class="muted">transfer-only ${HDEngine.money(qLine.price)}/yd</div>` : "";
+      return `
       <tr>
         <td>
           <input value="${escAttr(m.name)}" data-line="${i}" data-k="name">
@@ -1410,10 +1416,11 @@ function renderMaterialLines() {
         </td>
         <td><input type="number" min="0" step="0.25" value="${m.qty}" data-line="${i}" data-k="qty" style="width:90px"></td>
         <td><input value="${escAttr(m.unit)}" data-line="${i}" data-k="unit" style="width:80px"></td>
-        <td><input type="number" min="0" step="0.01" value="${m.price}" data-line="${i}" data-k="price" style="width:100px"></td>
-        <td class="line-amt" data-amt="${i}">${HDEngine.money((Number(m.qty) || 0) * (Number(m.price) || 0))}</td>
+        <td><input type="number" min="0" step="0.01" value="${m.price}" data-line="${i}" data-k="price" style="width:100px">${basis}</td>
+        <td class="line-amt" data-amt="${i}">${HDEngine.money(amount)}</td>
         <td><button class="ghost" data-del="${i}">Remove</button></td>
-      </tr>`).join("")}
+      </tr>`;
+    }).join("")}
   </tbody></table>`;
 }
 
@@ -1436,7 +1443,8 @@ function onLineEdit(e) {
     t.value = 1;
   }
   const amt = $("material-lines").querySelector(`[data-amt="${i}"]`);
-  if (amt) amt.textContent = HDEngine.money((Number(m.qty) || 0) * (Number(m.price) || 0));
+  const qLine = (currentQuote().lines || [])[i];
+  if (amt) amt.textContent = HDEngine.money(qLine ? qLine.amount : (Number(m.qty) || 0) * (Number(m.price) || 0));
   if (m.requires_forklift && state.draft.truck !== "forklift") setTruck("forklift");
   else {
     updateTicketChrome();
@@ -1481,17 +1489,21 @@ function renderQuoteBox() {
   state.quote = q;
   const routed = !!state.route;
   const feeBit = q.forkliftFee ? ` · ${HDEngine.money(q.forkliftFee)} forklift fee` : "";
-  const toteBit = q.toteFee ? ` · ${HDEngine.money(q.toteFee)} tote / bagging` : "";
+  const toteBit = q.toteFee
+    ? ` · ${HDEngine.FEE_LINE} ${HDEngine.money(q.toteFee)}`
+    : ` · ${HDEngine.FEE_LINE}`;
+  const envBit = q.environmentalFee ? ` · Environmental fee (Willow Creek) ${HDEngine.money(q.environmentalFee)}` : "";
+  const wcFuelBit = q.willowFuel ? ` · Material fuel surcharge (Willow Creek) $${Number(q.willowFuelPerYd || 1.3).toFixed(2)}/yd ${HDEngine.money(q.willowFuel)}` : "";
   const fuelBit = `${HDEngine.money(q.fuelSurcharge)} · ${HDEngine.fuelSentence(q)}`;
   const quarryBit = q.quarryDirect ? `<div style="margin-top:8px;color:#f3d7b5">Quarry direct — truckload</div>` : "";
   const splitBit = loadSplitText(q) ? `<div class="load-split" style="margin-top:8px">${esc(loadSplitText(q))}</div>` : "";
   $("quote-box").innerHTML = `
     <div class="l muted" style="color:#d9c4a8">Delivery + materials + fuel</div>
     <div class="total">${HDEngine.money(q.total)}</div>
-    <div style="margin-top:8px">${HDEngine.money(q.deliveryFee)} delivery · ${HDEngine.money(q.materialsTotal)} materials${feeBit}${toteBit} · ${fuelBit}</div>
+    <div style="margin-top:8px">${HDEngine.money(q.deliveryFee)} delivery · ${HDEngine.money(q.materialsTotal)} materials${feeBit}${toteBit}${envBit}${wcFuelBit} · ${fuelBit}</div>
     ${splitBit}
     ${quarryBit}
-    <div class="break">${routed ? q.formula : "Punch the delivery address and hit Calculate route to lock time and delivery fee.\nMaterials, the forklift fee, and the tote fee update the total as you type.\n" + HDEngine.fuelSentence(q)}</div>
+    <div class="break">${routed ? q.formula : "Punch the delivery address and hit Calculate route to lock time and delivery fee.\nMaterials, the forklift fee, and tote bagging, spread, additional service update the total as you type.\n" + HDEngine.fuelSentence(q)}</div>
     ${state.route ? `<div style="margin-top:10px;font-size:13px">Mapped ${state.route.miles.toFixed(1)} mi one-way via ${state.route.provider === "google" ? "Google" : "OSM / OSRM"}</div>` : ""}
   `;
 }
@@ -1571,7 +1583,7 @@ function collectForm() {
   state.draft.truck = selectedTruck();
   lockTicketMath(state.draft);
   state.draft.forkliftFee = Math.max(0, Number($("f-forklift-fee").value) || 0);
-  state.draft.toteFee = Math.max(0, Number($("f-tote-fee").value) || 0);
+  state.draft.toteFee = HDEngine.toteAmount($("f-tote-fee").value);
   if ($("f-quote") && $("f-quote").checked) state.draft.status = "quote";
   else {
     const st = normalizeStatus($("f-status").value);
@@ -1697,7 +1709,7 @@ function openTicket(id) {
   state.draft = JSON.parse(JSON.stringify(job));
   if (!Array.isArray(state.draft.materials)) state.draft.materials = [];
   if (state.draft.forkliftFee == null) state.draft.forkliftFee = 0;
-  if (state.draft.toteFee == null) state.draft.toteFee = 0;
+  if (state.draft.toteFee === "") state.draft.toteFee = null;
   HDReceipt.normalize(state.draft);
   lockTicketMath(state.draft);
   state.draft.status = normalizeStatus(state.draft.status);
@@ -1742,6 +1754,7 @@ function addMaterial(id) {
       category: m.category,
       unit: HDCatalog.isQuarry(m) ? "ton" : m.unit,
       price: m.price,
+      transferPrice: m.transferPrice,
       qty,
       source: m.source,
       book: HDCatalog.bookOf(m),
@@ -2005,9 +2018,11 @@ function buildPrint(ticket) {
   const feeRow = q.forkliftFee
     ? `<tr><td>Forklift / extra fee</td><td>${HDEngine.money(q.forkliftFee)}</td></tr>`
     : "";
-  const toteRow = q.toteFee
-    ? `<tr><td>Tote / bagging fee</td><td>${HDEngine.money(q.toteFee)}</td></tr>`
-    : "";
+  const toteRow = `<tr><td>${esc(HDEngine.FEE_LINE)}</td><td>${q.toteFee ? HDEngine.money(q.toteFee) : ""}</td></tr>`;
+  const willowRows = [
+    q.environmentalFee ? `<tr><td>Environmental fee (Willow Creek)</td><td>${HDEngine.money(q.environmentalFee)}</td></tr>` : "",
+    q.willowFuel ? `<tr><td>Material fuel surcharge (Willow Creek) $${Number(q.willowFuelPerYd || 1.3).toFixed(2)}/yd</td><td>${HDEngine.money(q.willowFuel)}</td></tr>` : "",
+  ].join("");
   const splitText = loadSplitText(q);
   const truckLine = splitText && q.loadCount > 1
     ? splitText
@@ -2061,12 +2076,15 @@ function buildPrint(ticket) {
         ${dispatchRows}
         ${feeRow}
         ${toteRow}
+        ${willowRows}
       </table>
       <div class="totals-box">
         Materials ${HDEngine.money(q.materialsTotal)}<br>
         Delivery ${HDEngine.money(q.deliveryFee)}<br>
         ${q.forkliftFee ? "Forklift / extra equipment " + HDEngine.money(q.forkliftFee) + "<br>" : ""}
-        ${q.toteFee ? "Tote / bagging fee " + HDEngine.money(q.toteFee) + "<br>" : ""}
+        ${esc(HDEngine.FEE_LINE)}${q.toteFee ? " " + HDEngine.money(q.toteFee) : ""}<br>
+        ${q.environmentalFee ? "Environmental fee (Willow Creek) " + HDEngine.money(q.environmentalFee) + "<br>" : ""}
+        ${q.willowFuel ? "Material fuel surcharge (Willow Creek) $" + Number(q.willowFuelPerYd || 1.3).toFixed(2) + "/yd " + HDEngine.money(q.willowFuel) + "<br>" : ""}
         Fuel surcharge ${HDEngine.money(q.fuelSurcharge)}<br>
         ${esc(HDEngine.fuelSentence(q))}<br>
         ${q.tax ? "Tax " + HDEngine.money(q.tax) + "<br>" : ""}
@@ -2172,7 +2190,9 @@ function emailAccounting(ticket) {
     ...HDEngine.dispatchLines(q, ticket.id).map((l) => `Dispatch line ${l.index} of ${l.count} (ticket ${ticket.id}): ${truckName(l.truck)} ${HDEngine.money(l.deliveryFee)}`),
     `Mapped one-way: ${(q.oneWayMin || 0).toFixed(1)} min`,
     q.forkliftFee ? `Forklift / extra equipment fee: ${HDEngine.money(q.forkliftFee)}` : `Forklift / extra equipment fee: $0.00`,
-    q.toteFee ? `Tote / bagging fee: ${HDEngine.money(q.toteFee)}` : null,
+    HDEngine.feeLine(q),
+    q.environmentalFee ? `Environmental fee (Willow Creek): ${HDEngine.money(q.environmentalFee)}` : null,
+    q.willowFuel ? `Material fuel surcharge (Willow Creek): $${Number(q.willowFuelPerYd || 1.3).toFixed(2)}/yd ${HDEngine.money(q.willowFuel)}` : null,
     `Fuel surcharge: ${HDEngine.money(q.fuelSurcharge)}`,
     `Diesel week of ${HDEngine.weekLabel(q.dieselWeekOf) || "—"}`,
     ``,
@@ -2245,7 +2265,7 @@ function seedPreview() {
     loads: 1,
     extraMinutes: 0,
     forkliftFee: 0,
-    toteFee: 0,
+    toteFee: null,
   });
   db.jobs.push({
     id: "HD-2026-0001",
@@ -2265,7 +2285,7 @@ function seedPreview() {
     extraSiteMinutes: 0,
     extraWaitMinutes: 0,
     forkliftFee: 0,
-    toteFee: 0,
+    toteFee: null,
     materials,
     quote,
     route: { provider: "osrm", seconds: 18 * 60, miles: 8.4, from: { lat: 42.3916, lng: -122.9124 }, to: { lat: 42.3266, lng: -122.8756 } },
@@ -2520,7 +2540,7 @@ async function onReady() {
     ["input", "change", "keyup"].forEach((ev) => el.addEventListener(ev, apply));
   }
   liveField("f-forklift-fee", () => { state.draft.forkliftFee = Math.max(0, Number($("f-forklift-fee").value) || 0); renderQuoteBox(); });
-  liveField("f-tote-fee", () => { state.draft.toteFee = Math.max(0, Number($("f-tote-fee").value) || 0); renderQuoteBox(); });
+  liveField("f-tote-fee", () => { state.draft.toteFee = HDEngine.toteAmount($("f-tote-fee").value); renderQuoteBox(); });
   liveField("f-rate", () => { state.draft.rateOverride = Number($("f-rate").value); renderQuoteBox(); });
   $("f-admin-rate").addEventListener("change", () => {
     state.draft.adminRate = $("f-admin-rate").checked;
@@ -2716,7 +2736,7 @@ async function onReady() {
       if (!job) return;
       state.draft = { ...JSON.parse(JSON.stringify(job)), id: null, createdAt: null, status: "new", paid: false, paidBy: "", paidAt: null };
       if (state.draft.forkliftFee == null) state.draft.forkliftFee = 0;
-      if (state.draft.toteFee == null) state.draft.toteFee = 0;
+      if (state.draft.toteFee === "") state.draft.toteFee = null;
       HDReceipt.normalize(state.draft);
       lockTicketMath(state.draft);
       state.route = job.route || null;

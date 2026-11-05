@@ -174,6 +174,24 @@ run(`
 assert.ok(els["job-table"].innerHTML.includes("2 loads: Transfer 20 + Transfer 20"), "week board shows the load count and the split");
 run(`state.boardView = "live"; renderBoard();`);
 assert.ok(els["job-table"].innerHTML.includes("2 loads: Transfer 20 + Transfer 20"), "live board shows the load count and the split");
+run(`
+  var __rock30 = HDEngine.quote({
+    truck: "dump", oneWaySeconds: 30 * 60, billing: db.settings.billing,
+    materials: [{ id: "three-quarter-minus", name: "3/4\\" Minus", qty: 30, unit: "yd", price: 28, book: "store", category: "Rock / yard" }]
+  });
+  var __soil30 = HDEngine.quote({
+    truck: "dump", oneWaySeconds: 30 * 60, billing: db.settings.billing,
+    materials: [{ id: "topsoil", name: "Topsoil", qty: 30, unit: "yd", price: 25, book: "store" }]
+  });
+  db.jobs = [
+    { id: "ROCK30", status: "new", customer: "Rock 30", yardId: "cp", truck: "dump", deliverOn: "2026-10-20T08:15", quote: __rock30 },
+    { id: "SOIL30", status: "new", customer: "Soil 30", yardId: "cp", truck: "dump", deliverOn: "2026-10-20T09:15", quote: __soil30 }
+  ];
+  state.boardView = "live";
+  renderBoard();
+`);
+assert.ok(els["job-table"].innerHTML.includes("2 loads: Transfer 20 + Dump 10"), "live board shows the 30 yd rock split");
+assert.ok(els["job-table"].innerHTML.includes("2 loads: Transfer 24 + Dump 6"), "live board shows the 30 yd topsoil split");
 
 const upgraded = json(`(function () {
   var store = normalizeStore({

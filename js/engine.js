@@ -16,14 +16,21 @@
                                               several loads; the invoice delivery fee is the sum. By-the-pound
                                               items, flagstone, boulders, and forklift stone stay one load.
    8. Materials                             = Σ qty * unitPrice (once, not once per load)
+                                              Topsoil, Forest Loam, and Topsoil Plus use the transfer-only
+                                              yard price when every load of that soil is a transfer.
+                                              A split onto a dump or Small 550 keeps the yard POS price.
    9. Forklift / extra fee                  = ticket dollars (default 0). Not the South Stage adder.
-  10. Tote / bagging fee                    = ticket dollars typed by hand (default 0)
+  10. tote bagging, spread, additional service = one line, typed by hand. Blank stays blank.
+                                              Spreading is this line. There is no separate spread fee.
   11. surchargePercent                      = the percent typed in Settings (15 means 15%). Default 0.
                                               Diesel price and week-of are printed as the EIA index only.
   12. fuelSurcharge                         = deliveryFee * (surchargePercent / 100)
-  13. Tax                                   = (delivery + materials + forkliftFee + toteFee + fuelSurcharge) * taxRate
-                                              (OR default 0)
-  14. total                                 = delivery + materials + forkliftFee + toteFee + fuelSurcharge + tax
+                                              Willow Creek material fuel is separate: $1/ton, shown as $1.30/yd
+                                              (1.3 t/yd), on quarry material only.
+  13. Environmental fee                     = $5 per Willow Creek load. Printed on the quote and the receipt.
+  14. Tax                                   = (delivery + materials + forkliftFee + tote + fuelSurcharge
+                                              + environmentalFee + willowFuel) * taxRate (OR default 0)
+  15. total                                 = that sum + tax
 */
 
 window.HDEngine = {
@@ -103,16 +110,33 @@ window.HDEngine = {
   SOUTH_STAGE_YARD: "medford",
   SOUTH_STAGE_FORKLIFT: 40,
 
-  // Bobtail / transfer capacities in yards. Willow Creek rows are priced per ton;
-  // the load split uses the quantity number as yards, the same way the desk says "30 yd".
-  // bulk-yard is the default for store products sold by the yard. It is not a product id.
-  LOAD_CAPS: {
-    topsoil: { bobtail: 12, transfer: 24, pile: "topsoil" },
-    "forest-loam": { bobtail: 15, transfer: 30, pile: "loam" },
-    "topsoil-plus": { bobtail: 15, transfer: 30, pile: "loam" },
-    willow: { bobtail: 10, transfer: 20, pile: "willow" },
-    "bulk-yard": { bobtail: 10, transfer: 20, pile: "bulk-yard" },
+  // One fee line. Spreading is part of it. The amount stays blank until someone types it.
+  FEE_LINE: "tote bagging, spread, additional service",
+
+  // Class caps in yards. These replace the flat 10 yd bobtail / 20 yd transfer store-bulk split.
+  // Small 550, dump, then transfer. A remainder rides the smallest truck that can carry it.
+  // Soil transfer is 24 except Forest Loam and Topsoil Plus, which stay 30.
+  // Other soils use that same 24. Compost is with bark/mulch, not with soil.
+  // Willow Creek quarry rock is NOT this rock class. Small rock is 3 yd and dump rock is 10 yd,
+  // so the class rule would make 30 yd of pit rock a transfer plus a dump. The named quarry rule
+  // is still bobtail 10 / transfer 20 (30 yd = transfer + bobtail, 40 yd = two transfers, no dump).
+  TRUCK_CAPS: {
+    rock: { small: 3, dump: 10, transfer: 20, pile: "rock" },
+    soil: { small: 4, dump: 12, transfer: 24, pile: "soil" },
+    topsoil: { small: 4, dump: 12, transfer: 24, pile: "topsoil" },
+    loam: { small: 4, dump: 12, transfer: 30, pile: "loam" },
+    bark: { small: 5, dump: 20, transfer: 50, pile: "bark" },
+    willow: { small: 10, dump: 0, transfer: 20, pile: "willow" },
   },
+
+  // Transfer-only soil prices. Yard POS prices stay on the material row.
+  TRANSFER_ONLY_PRICES: { topsoil: 16, "forest-loam": 20, "topsoil-plus": 26 },
+  POS_SOIL_PRICES: { topsoil: 25, "forest-loam": 27, "topsoil-plus": 34 },
+
+  // Willow Creek fees from the 2026-11-05 book. Do not fold the environmental fee into materials.
+  WC_ENV_PER_LOAD: 5,
+  WC_FUEL_PER_TON: 1,
+  WC_TONS_PER_YD: 1.3,
 
   normText(s) {
     return String(s || "").trim().toLowerCase().replace(/[.]/g, "").replace(/\s+/g, " ");
@@ -122,10 +146,9 @@ window.HDEngine = {
     return String(s || "").replace(/\D/g, "");
   },
 
-  // Store soils by their book id. A lookalike name with a different id is not these soils.
   // Willow Creek quarry rock is the pit book: book willow, source quarry, truckload_only,
   // an id starting with q-, or a Willow Creek category.
-  // Any other store product sold by the yard uses the 20/10 bulk split.
+  // Store products sold by the yard use the class caps above.
   // By-the-pound items, flagstone, boulders, and forklift stone do not.
   isWillow(material) {
     if (!material) return false;
@@ -151,38 +174,46 @@ window.HDEngine = {
     return !!String(material.id || "");
   },
 
-  capacityFor(material) {
+  // rock, topsoil, loam (Forest Loam + Topsoil Plus), soil, bark (bark/mulch/compost), or willow.
+  materialClass(material) {
     if (!material) return null;
+    if (this.isWillow(material)) return "willow";
+    if (!this.isBulkYard(material)) return null;
     const id = String(material.id || "");
-    if (this.LOAD_CAPS[id]) return this.LOAD_CAPS[id];
-    if (this.isWillow(material)) return this.LOAD_CAPS.willow;
-    if (!id) {
-      const name = this.normText(material.name);
-      const named = {
-        topsoil: this.LOAD_CAPS.topsoil,
-        "forest loam": this.LOAD_CAPS["forest-loam"],
-        "topsoil plus": this.LOAD_CAPS["topsoil-plus"],
-      };
-      if (named[name] && (material.book === "store" || material.category === "Soils")) return named[name];
-    }
-    if (this.isBulkYard(material)) return this.LOAD_CAPS["bulk-yard"];
-    return null;
+    const name = this.normText(material.name);
+    const cat = this.normText(material.category);
+    if (id === "topsoil" || name === "topsoil" || name === "top soil") return "topsoil";
+    if (id === "forest-loam" || id === "topsoil-plus" || name === "forest loam" || name === "topsoil plus") return "loam";
+    const blob = id + " " + name + " " + cat;
+    if (/compost|bark|mulch|sawdust|chip|nugget|hemlock|bedding|gorilla|forest floor/.test(blob)) return "bark";
+    if (cat === "soils" || cat.indexOf("soil") >= 0) return "soil";
+    return "rock";
   },
 
-  // Full transfers first. A remainder that fits a bobtail is one small load; otherwise another transfer.
+  capacityFor(material) {
+    const cls = this.materialClass(material);
+    return cls ? this.TRUCK_CAPS[cls] : null;
+  },
+
+  // Full transfers first. The remainder goes on the smallest truck that can carry it:
+  // Small 550, then dump, then another transfer. Willow Creek dump cap is 0, so a pit
+  // remainder that fits the bobtail stays a bobtail and never becomes a dump.
   planQuantity(qty, cap) {
     const q = Math.round((Number(qty) || 0) * 1000) / 1000;
     const transferCap = cap && Number(cap.transfer);
-    const bobtailCap = cap && Number(cap.bobtail);
-    if (!(q > 0) || !(transferCap > 0) || !(bobtailCap > 0)) return [];
+    const dumpCap = cap && Number(cap.dump);
+    const smallCap = cap && Number(cap.small);
+    if (!(q > 0) || !(transferCap > 0) || !(smallCap > 0)) return [];
     const full = Math.floor((q + 1e-9) / transferCap);
     let rem = Math.round((q - full * transferCap) * 1000) / 1000;
     if (rem < 0.001) rem = 0;
     const loads = [];
-    for (let i = 0; i < full; i++) loads.push({ truck: "transfer", kind: "transfer", yards: transferCap });
+    const pile = cap.pile || "";
+    for (let i = 0; i < full; i++) loads.push({ truck: "transfer", kind: "transfer", yards: transferCap, pile });
     if (rem > 0) {
-      if (rem <= bobtailCap + 1e-9) loads.push({ truck: "small", kind: "bobtail", yards: rem });
-      else loads.push({ truck: "transfer", kind: "transfer", yards: rem });
+      if (rem <= smallCap + 1e-9) loads.push({ truck: "small", kind: "bobtail", yards: rem, pile });
+      else if (dumpCap > 0 && rem <= dumpCap + 1e-9) loads.push({ truck: "dump", kind: "dump", yards: rem, pile });
+      else loads.push({ truck: "transfer", kind: "transfer", yards: rem, pile });
     }
     return loads;
   },
@@ -211,8 +242,8 @@ window.HDEngine = {
     }).join(" + ");
   },
 
-  // Same capacity class is one pile (all pit rock together, Forest Loam with Topsoil Plus,
-  // store by-the-yard bulk together). Pit rock does not pile with store bulk.
+  // Same capacity class is one pile (all store rock together, Forest Loam with Topsoil Plus,
+  // bark/mulch/compost together). Pit rock does not pile with store rock.
   // By-the-pound items, flagstone, boulders, and forklift stone do not add a load.
   planMaterials(materials, selectedTruck) {
     const groups = new Map();
@@ -220,7 +251,7 @@ window.HDEngine = {
     (materials || []).forEach((material) => {
       const cap = this.capacityFor(material);
       if (!cap) return;
-      const key = cap.pile || (cap.bobtail + "/" + cap.transfer);
+      const key = cap.pile || (cap.small + "/" + cap.dump + "/" + cap.transfer);
       if (!groups.has(key)) {
         groups.set(key, { cap, qty: 0 });
         order.push(key);
@@ -241,7 +272,7 @@ window.HDEngine = {
     return { planned: true, loads, split: this.splitLabel(loads) };
   },
 
-  priceLoad({ oneWaySeconds, truck, billing, yardId, yards, kind }) {
+  priceLoad({ oneWaySeconds, truck, billing, yardId, yards, kind, pile }) {
     const b = billing || {};
     const oneWayMin = Math.max(0, (Number(oneWaySeconds) || 0) / 60);
     const tripFactor = (b.tripMode || "roundtrip") === "oneway" ? 1 : 2;
@@ -267,7 +298,8 @@ window.HDEngine = {
     const deliveryFee = Number((hourlyFee + southStage).toFixed(2));
     return {
       truck: isDump ? "dump" : isTransfer ? "transfer" : isForklift ? "forklift" : "small",
-      kind: kind || (isTransfer ? "transfer" : (!isDump && !isForklift ? "bobtail" : "")),
+      kind: kind || (isTransfer ? "transfer" : isDump ? "dump" : isForklift ? "" : "bobtail"),
+      pile: pile || "",
       yards: yards == null ? null : yards,
       oneWayMin,
       tripFactor,
@@ -336,6 +368,60 @@ window.HDEngine = {
     return matches;
   },
 
+  // Blank, empty, and zero stay unset. A typed amount above zero is the fee.
+  toteAmount(toteFee) {
+    if (toteFee == null || toteFee === "") return null;
+    const n = Number(toteFee);
+    if (!isFinite(n) || n <= 0) return null;
+    return n;
+  },
+
+  transferOnlyRate(material) {
+    if (!material) return null;
+    if (material.transferPrice != null && material.transferPrice !== "") {
+      const n = Number(material.transferPrice);
+      if (isFinite(n)) return n;
+    }
+    const id = String(material.id || "");
+    return Object.prototype.hasOwnProperty.call(this.TRANSFER_ONLY_PRICES, id) ? this.TRANSFER_ONLY_PRICES[id] : null;
+  },
+
+  // Transfer-only when every planned load of that pile is a transfer.
+  // A punched price that is not the yard POS price is left alone.
+  linePrice(material, plan) {
+    const retail = Number(material && material.price) || 0;
+    const cap = this.capacityFor(material);
+    const pile = cap && cap.pile;
+    const loads = pile && plan && plan.planned ? (plan.loads || []).filter((load) => load.pile === pile) : [];
+    const transferOnly = loads.length > 0 && loads.every((load) => load.truck === "transfer");
+    const rate = this.transferOnlyRate(material);
+    const pos = this.POS_SOIL_PRICES[String(material && material.id || "")];
+    const atBook = pos == null || Math.abs(retail - pos) < 0.001 || retail === 0;
+    if (transferOnly && rate != null && atBook) {
+      return { price: rate, transferOnly: true };
+    }
+    return { price: retail, transferOnly: false };
+  },
+
+  // $1/ton on Willow Creek material. Yard display is $1.30/yd at 1.3 t/yd.
+  // Tons and yards describe the same charge: qty tons * $1 = (qty / 1.3) yd * $1.30.
+  willowFuelFor(materials) {
+    let tons = 0;
+    (materials || []).forEach((m) => {
+      if (!this.isWillow(m)) return;
+      const qty = Number(m.qty) || 0;
+      if (!(qty > 0)) return;
+      const unit = this.normText(m.unit);
+      if (unit === "yd" || unit === "yard" || unit === "yards") tons += qty * this.WC_TONS_PER_YD;
+      else tons += qty;
+    });
+    tons = Number(tons.toFixed(4));
+    const perYd = Number((this.WC_FUEL_PER_TON * this.WC_TONS_PER_YD).toFixed(2));
+    const yards = tons ? Number((tons / this.WC_TONS_PER_YD).toFixed(4)) : 0;
+    const amount = Number((tons * this.WC_FUEL_PER_TON).toFixed(2));
+    return { tons, yards, perTon: this.WC_FUEL_PER_TON, perYd, amount };
+  },
+
   quote({
     oneWaySeconds,
     truck,
@@ -350,7 +436,7 @@ window.HDEngine = {
     const extraWait = 0;
     const extra = 0;
     const fee = Math.max(0, Number(forkliftFee) || 0);
-    const tote = Math.max(0, Number(toteFee) || 0);
+    const tote = this.toteAmount(toteFee);
     const plan = this.planMaterials(materials, truck);
     const priced = plan.loads.map((load) => this.priceLoad({
       oneWaySeconds,
@@ -359,6 +445,7 @@ window.HDEngine = {
       yardId,
       yards: load.yards,
       kind: load.kind,
+      pile: load.pile,
     }));
     const primary = priced[0];
     const loadCount = priced.length;
@@ -370,17 +457,24 @@ window.HDEngine = {
 
     const lines = (materials || []).map((m) => {
       const qty = Number(m.qty) || 0;
-      const price = Number(m.price) || 0;
+      const pricedLine = this.linePrice(m, plan);
+      const price = pricedLine.price;
       return {
         ...m,
         qty,
         price,
+        transferOnly: pricedLine.transferOnly,
         amount: Number((qty * price).toFixed(2)),
       };
     });
     const materialsTotal = Number(lines.reduce((s, l) => s + l.amount, 0).toFixed(2));
     const fuel = this.fuelFrom(b, deliveryFee);
-    const subtotal = Number((deliveryFee + materialsTotal + fee + fuel.fuelSurcharge + tote).toFixed(2));
+    const environmentalLoads = priced.filter((load) => load.pile === "willow").length;
+    const environmentalFee = Number((environmentalLoads * this.WC_ENV_PER_LOAD).toFixed(2));
+    const willow = this.willowFuelFor(materials);
+    const willowFuel = willow.amount;
+    const toteDollars = tote || 0;
+    const subtotal = Number((deliveryFee + materialsTotal + fee + fuel.fuelSurcharge + toteDollars + environmentalFee + willowFuel).toFixed(2));
     const taxRate = Number(b.taxRate) || 0;
     const tax = Number((subtotal * taxRate).toFixed(2));
     const total = Number((subtotal + tax).toFixed(2));
@@ -397,6 +491,14 @@ window.HDEngine = {
       extraWait,
       forkliftFee: fee,
       toteFee: tote,
+      environmentalFee,
+      environmentalLoads,
+      environmentalPerLoad: this.WC_ENV_PER_LOAD,
+      willowFuel,
+      willowFuelPerTon: willow.perTon,
+      willowFuelPerYd: willow.perYd,
+      willowFuelTons: willow.tons,
+      willowFuelYards: willow.yards,
       southStage,
       dieselPrice: fuel.dieselPrice,
       dieselWeekOf: fuel.dieselWeekOf,
@@ -428,6 +530,35 @@ window.HDEngine = {
     return result;
   },
 
+  feeLine(q) {
+    if (q && q.toteFee) return `${this.FEE_LINE}: ${this.money(q.toteFee)}`;
+    return this.FEE_LINE;
+  },
+
+  willowFeeLines(q) {
+    const lines = [];
+    if (q && q.environmentalFee) {
+      const n = q.environmentalLoads || 0;
+      const each = this.money(q.environmentalPerLoad || this.WC_ENV_PER_LOAD);
+      lines.push(`Environmental fee (Willow Creek): ${each} per load × ${n} = ${this.money(q.environmentalFee)}`);
+    }
+    if (q && q.willowFuel) {
+      const perYd = Number(q.willowFuelPerYd || 1.3).toFixed(2);
+      lines.push(`Material fuel surcharge (Willow Creek): $1/ton shown as $${perYd}/yd (${this.WC_TONS_PER_YD} t/yd) × ${q.willowFuelTons} ton = ${this.money(q.willowFuel)}`);
+    }
+    return lines;
+  },
+
+  totalEquation(q) {
+    const preTax = (Number(q.deliveryFee) || 0) + (Number(q.materialsTotal) || 0) + (Number(q.fuelSurcharge) || 0) + (Number(q.forkliftFee) || 0) + (Number(q.toteFee) || 0) + (Number(q.environmentalFee) || 0) + (Number(q.willowFuel) || 0);
+    let eq = q.toteFee
+      ? "total = delivery + materials + forkliftFee + toteFee + fuelSurcharge"
+      : "total = delivery + materials + forkliftFee + fuelSurcharge";
+    if (q.environmentalFee) eq += " + environmentalFee";
+    if (q.willowFuel) eq += " + willowFuel";
+    return `${eq} = ${this.money(preTax)}`;
+  },
+
   describe(q) {
     if (q.loads && q.loads.length > 1) return this.describeLoads(q);
     const tripLabel = q.tripFactor === 2 ? "round trip" : "one way";
@@ -438,10 +569,6 @@ window.HDEngine = {
         : q.isForklift
           ? " (no dump buffer — forklift truck)"
           : " (no buffer — small truck)";
-    const preTax = (Number(q.deliveryFee) || 0) + (Number(q.materialsTotal) || 0) + (Number(q.fuelSurcharge) || 0) + (Number(q.forkliftFee) || 0) + (Number(q.toteFee) || 0);
-    const totalLine = q.toteFee
-      ? `total = delivery + materials + forkliftFee + toteFee + fuelSurcharge = ${this.money(preTax)}`
-      : `total = delivery + materials + forkliftFee + fuelSurcharge = ${this.money(preTax)}`;
     return [
       q.planned && q.split ? `${q.loadCount} ${q.loadCount === 1 ? "load" : "loads"}: ${q.split}` : null,
       `Mapped one-way drive: ${q.oneWayMin.toFixed(1)} min`,
@@ -454,20 +581,17 @@ window.HDEngine = {
       q.southStage ? `South Stage forklift ${this.money(q.southStage)} is included in the delivery fee.` : null,
       `Materials: ${this.money(q.materialsTotal)}`,
       q.forkliftFee ? `Forklift / extra fee: ${this.money(q.forkliftFee)}` : `Forklift / extra fee: ${this.money(0)}`,
-      q.toteFee ? `Tote / bagging fee: ${this.money(q.toteFee)}` : null,
+      this.feeLine(q),
       this.fuelSentence(q),
-      totalLine,
+    ].concat(this.willowFeeLines(q), [
+      this.totalEquation(q),
       q.tax ? `Tax: ${this.money(q.tax)}` : null,
       `TOTAL: ${this.money(q.total)}`,
-    ].filter(Boolean).join("\n");
+    ]).filter(Boolean).join("\n");
   },
 
   describeLoads(q) {
     const tripLabel = q.tripFactor === 2 ? "round trip" : "one way";
-    const preTax = (Number(q.deliveryFee) || 0) + (Number(q.materialsTotal) || 0) + (Number(q.fuelSurcharge) || 0) + (Number(q.forkliftFee) || 0) + (Number(q.toteFee) || 0);
-    const totalLine = q.toteFee
-      ? `total = delivery + materials + forkliftFee + toteFee + fuelSurcharge = ${this.money(preTax)}`
-      : `total = delivery + materials + forkliftFee + fuelSurcharge = ${this.money(preTax)}`;
     const loadLines = (q.loads || []).map((load, i) => {
       const name = load.truck === "transfer" ? "Transfer" : load.truck === "small" ? "Bobtail" : load.truck === "forklift" ? "Forklift" : "Dump";
       const buf = (load.isDump || load.isTransfer) ? `, road × ${Number(load.multiplier).toFixed(2)}` : "";
@@ -481,11 +605,12 @@ window.HDEngine = {
       `Delivery fee (sum of loads): ${this.money(q.deliveryFee)}`,
       `Materials: ${this.money(q.materialsTotal)}`,
       q.forkliftFee ? `Forklift / extra fee: ${this.money(q.forkliftFee)}` : `Forklift / extra fee: ${this.money(0)}`,
-      q.toteFee ? `Tote / bagging fee: ${this.money(q.toteFee)}` : null,
+      this.feeLine(q),
       this.fuelSentence(q),
-      totalLine,
+    ].concat(this.willowFeeLines(q), [
+      this.totalEquation(q),
       q.tax ? `Tax: ${this.money(q.tax)}` : null,
       `TOTAL: ${this.money(q.total)}`,
-    ]).filter(Boolean).join("\n");
+    ])).filter(Boolean).join("\n");
   },
 };
