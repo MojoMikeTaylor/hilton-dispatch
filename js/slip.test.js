@@ -170,11 +170,11 @@ const multiHouse = multiHtml.slice(multiHtml.indexOf('<section class="sheet hous
 assert.strictEqual((multiCustomer.match(/class="dispatch-line"/g) || []).length, 2, "customer page prints one dispatch line per load");
 assert.strictEqual((multiHouse.match(/class="dispatch-line"/g) || []).length, 4, "house sheet repeats a dispatch line per load and a billable line per load");
 assert.ok(multiCustomer.includes('data-ticket="HD-MULTI"') && multiHouse.includes('data-ticket="HD-MULTI"'), "dispatch lines stay under the same ticket");
-assert.ok(multiHouse.includes("2 loads: Transfer 20 + Bobtail 10"), "house sheet shows the load count and the split");
+assert.ok(multiHouse.includes("2 loads: Transfer 20 + Transfer 10"), "house sheet shows the load count and the split");
 assert.ok(multiCustomer.includes("Environmental fee (Willow Creek)"), "Willow Creek environmental fee is on the receipt");
 assert.ok(multiCustomer.includes("$1.30/yd"), "Willow Creek material fuel is shown as $1.30/yd");
 assert.ok(multiCustomer.includes("<td>tote bagging, spread, additional service</td><td></td>"), "blank tote line prints with no amount");
-assert.ok(multiCustomer.includes("Dispatch — Transfer Truck") && multiCustomer.includes("Dispatch — Small Truck 550"), "dispatch lines name the trucks in the split");
+assert.ok(multiCustomer.includes("Dispatch — Transfer Truck") && !multiCustomer.includes("Dispatch — Small Truck 550"), "a Bobtail ticket does not dispatch the remainder as a Small 550");
 assert.ok(!multiCustomer.includes("Delivery — Dump"), "a multi-load invoice does not collapse the trucks into one delivery row");
 const multiFees = run("HDEngine.money(__multi.loads[0].deliveryFee)") + " " + run("HDEngine.money(__multi.loads[1].deliveryFee)");
 assert.ok(multiCustomer.includes(run("HDEngine.money(__multi.loads[0].deliveryFee)")) && multiCustomer.includes(run("HDEngine.money(__multi.loads[1].deliveryFee)")), "each dispatch line shows its own fee (" + multiFees + ")");
@@ -411,5 +411,34 @@ assert.strictEqual(run("state.draft.materials.map(function (m) { return m.unit; 
 assert.strictEqual(run("state.draft.materials[2].tonPrice"), 6, "fill dirt phone price stays $6 per ton");
 assert(Math.abs(run("state.draft.materials[2].unitPrice") - (6 * 1.188)) < 0.001, "fill dirt yard price is $6 times 1.188");
 assert.ok(!run("state.draft.materials.some(function (m) { return HDCatalog.missingYardWeight(m); })"), "mapped draft rows are not missing a yard weight");
+
+run(`
+  state.draft = blankDraft();
+  state.route = null;
+  state.draft.adminRate = false;
+  state.draft.materials = [{ id: "three-quarter-minus", name: "3/4 Minus", category: "Rock / yard", unit: "yd", qty: 3, price: 28, book: "store" }];
+  setTruck("dump");
+`);
+assert.strictEqual(run("selectedTruck()"), "dump", "the Bobtail control selects dump");
+assert.strictEqual(run("currentQuote().loads[0].truck"), "dump", "the Bobtail quote uses dump");
+assert.strictEqual(run("currentQuote().loads[0].rate"), 150, "the Bobtail quote rate is $150");
+run(`setTruck("small");`);
+assert.strictEqual(run("selectedTruck()"), "small", "the Small 550 control selects small");
+assert.strictEqual(run("currentQuote().loads[0].rate"), 90, "the Small 550 quote rate is $90");
+run(`
+  state.draft.materials = [{ id: "topsoil", name: "Topsoil", unit: "yd", qty: 30, price: 25, book: "store" }];
+  setTruck("transfer");
+`);
+assert.strictEqual(run("currentQuote().loads.map(function (load) { return load.truck + ':' + load.yards + ':' + load.rate; }).join(',')"), "transfer:24:160,transfer:6:160", "transfer selection does not drop topsoil onto a dump");
+run(`setTruck("forklift");`);
+assert.strictEqual(run("currentQuote().loads.length"), 1, "forklift selection is one load");
+assert.strictEqual(run("currentQuote().loads[0].truck"), "forklift", "forklift selection stays a forklift");
+assert.strictEqual(run("currentQuote().loads[0].rate"), 160, "forklift selection bills $160");
+assert.strictEqual(run("defaultRateFor('bobtail')"), 150, "bobtail's rate is the dump rate");
+assert.strictEqual(run("defaultRateFor('small')"), 90, "small's rate is $90");
+assert.strictEqual(run("defaultRateFor('dump')"), 150, "dump's rate is $150");
+assert.strictEqual(run("defaultRateFor('transfer')"), 160, "transfer's rate is $160");
+assert.strictEqual(run("defaultRateFor('forklift')"), 160, "forklift's rate is $160");
+assert.notStrictEqual(run("defaultRateFor('bobtail')"), run("defaultRateFor('small')"), "Bobtail is not priced as the Small 550");
 
 console.log("slip.test.js OK");

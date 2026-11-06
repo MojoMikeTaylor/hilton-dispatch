@@ -1230,9 +1230,10 @@ function truckLabel(truck) {
 
 function defaultRateFor(truck) {
   const b = db.settings.billing;
-  if (truck === "dump") return b.dumpRate;
-  if (truck === "transfer") return b.transferRate || 160;
-  if (truck === "forklift") return b.forkliftRate || 160;
+  const id = HDEngine.canonicalTruck(truck);
+  if (id === "dump") return b.dumpRate;
+  if (id === "transfer") return b.transferRate || 160;
+  if (id === "forklift") return b.forkliftRate || 160;
   return b.smallRate;
 }
 
@@ -1471,9 +1472,10 @@ function ticketBilling() {
   if (state.draft.adminRate) {
     const rate = Number(state.draft.rateOverride);
     if (isFinite(rate) && rate > 0) {
-      if (state.draft.truck === "dump") b.dumpRate = rate;
-      else if (state.draft.truck === "transfer") b.transferRate = rate;
-      else if (state.draft.truck === "forklift") b.forkliftRate = rate;
+      const rateTruck = HDEngine.canonicalTruck(state.draft.truck);
+      if (rateTruck === "dump") b.dumpRate = rate;
+      else if (rateTruck === "transfer") b.transferRate = rate;
+      else if (rateTruck === "forklift") b.forkliftRate = rate;
       else b.smallRate = rate;
     }
   }

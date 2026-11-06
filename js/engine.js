@@ -195,15 +195,25 @@ window.HDEngine = {
     return cls ? this.TRUCK_CAPS[cls] : null;
   },
 
-  // Full transfers first. The remainder goes on the smallest truck that can carry it:
-  // Small 550, then dump, then another transfer. Willow Creek dump cap is 0, so a pit
-  // remainder that fits the bobtail stays a bobtail and never becomes a dump.
-  planQuantity(qty, cap) {
+  // Bobtail is the old dump. The word must not select the Small 550.
+  canonicalTruck(truck) {
+    const t = String(truck || "").trim().toLowerCase();
+    if (t === "dump" || t === "bobtail" || t === "bobtail truck") return "dump";
+    if (t === "transfer" || t === "transfer truck") return "transfer";
+    if (t === "forklift") return "forklift";
+    if (t === "small" || t === "small truck 550" || t === "small 550") return "small";
+    return "dump";
+  },
+
+  // The selected truck is the floor. A remainder may move up to a larger truck.
+  // It may not move down: dump never becomes a Small 550, transfer never becomes dump or small.
+  planQuantity(qty, cap, selectedTruck) {
     const q = Math.round((Number(qty) || 0) * 1000) / 1000;
     const transferCap = cap && Number(cap.transfer);
     const dumpCap = cap && Number(cap.dump);
     const smallCap = cap && Number(cap.small);
     if (!(q > 0) || !(transferCap > 0) || !(smallCap > 0)) return [];
+    const floor = this.canonicalTruck(selectedTruck);
     const full = Math.floor((q + 1e-9) / transferCap);
     let rem = Math.round((q - full * transferCap) * 1000) / 1000;
     if (rem < 0.001) rem = 0;
@@ -211,8 +221,10 @@ window.HDEngine = {
     const pile = cap.pile || "";
     for (let i = 0; i < full; i++) loads.push({ truck: "transfer", kind: "transfer", yards: transferCap, pile });
     if (rem > 0) {
-      if (rem <= smallCap + 1e-9) loads.push({ truck: "small", kind: "bobtail", yards: rem, pile });
-      else if (dumpCap > 0 && rem <= dumpCap + 1e-9) loads.push({ truck: "dump", kind: "dump", yards: rem, pile });
+      const smallOk = floor === "small" && rem <= smallCap + 1e-9;
+      const dumpOk = floor !== "transfer" && dumpCap > 0 && rem <= dumpCap + 1e-9;
+      if (smallOk) loads.push({ truck: "small", kind: "bobtail", yards: rem, pile });
+      else if (dumpOk) loads.push({ truck: "dump", kind: "dump", yards: rem, pile });
       else loads.push({ truck: "transfer", kind: "transfer", yards: rem, pile });
     }
     return loads;
@@ -246,6 +258,14 @@ window.HDEngine = {
   // bark/mulch/compost together). Pit rock does not pile with store rock.
   // By-the-pound items, flagstone, boulders, and forklift stone do not add a load.
   planMaterials(materials, selectedTruck) {
+    const truck = this.canonicalTruck(selectedTruck);
+    if (truck === "forklift") {
+      return {
+        planned: false,
+        loads: [{ truck: "forklift", kind: "", yards: null }],
+        split: "",
+      };
+    }
     const groups = new Map();
     const order = [];
     (materials || []).forEach((material) => {
@@ -260,12 +280,12 @@ window.HDEngine = {
     });
     const loads = [];
     order.forEach((key) => {
-      this.planQuantity(groups.get(key).qty, groups.get(key).cap).forEach((load) => loads.push(load));
+      this.planQuantity(groups.get(key).qty, groups.get(key).cap, truck).forEach((load) => loads.push(load));
     });
     if (!loads.length) {
       return {
         planned: false,
-        loads: [{ truck: selectedTruck || "dump", kind: "", yards: null }],
+        loads: [{ truck: truck, kind: "", yards: null }],
         split: "",
       };
     }
@@ -273,6 +293,7 @@ window.HDEngine = {
   },
 
   priceLoad({ oneWaySeconds, truck, billing, yardId, yards, kind, pile }) {
+    truck = this.canonicalTruck(truck);
     const b = billing || {};
     const oneWayMin = Math.max(0, (Number(oneWaySeconds) || 0) / 60);
     const tripFactor = (b.tripMode || "roundtrip") === "oneway" ? 1 : 2;
