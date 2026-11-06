@@ -273,10 +273,10 @@ function splitOf(qty, material, truck) {
   return q.loads.map((load) => (load.truck === "transfer" ? "T" : load.truck === "small" ? "B" : load.truck === "dump" ? "D" : load.truck)).join("+");
 }
 const wc = { id: "q-jaw-run", name: "Jaw Run", unit: "ton", price: 12.5, book: "willow", source: "quarry", truckload_only: true };
-assert(splitOf(30, wc) === "T+B", "30 yd Willow Creek rock stays 1 transfer + 1 bobtail");
+assert(splitOf(30, wc) === "T+D", "30 yd Willow Creek rock is 1 transfer plus the $150 Bobtail");
 assert(splitOf(40, wc) === "T+T", "40 yd Willow Creek rock is 2 transfers");
-assert(splitOf(10, wc) === "B", "10 yd Willow Creek rock is 1 bobtail");
-assert(splitOf(10, wc, "small") === "B", "10 yd pit rock on Small 550 is still the small truck");
+assert(splitOf(10, wc) === "D", "10 yd Willow Creek rock is the $150 Bobtail, not the Small 550");
+assert(splitOf(10, wc, "small") === "D", "the Willow 10-yard slot stays the Bobtail rate");
 assert(E.TRUCK_CAPS.willow.dump === 0 && E.TRUCK_CAPS.willow.small === 10 && E.TRUCK_CAPS.willow.transfer === 20, "Willow Creek named rule stays bobtail 10 / transfer 20 with no dump");
 assert(E.TRUCK_CAPS.rock.small === 3 && E.TRUCK_CAPS.rock.dump === 10 && E.TRUCK_CAPS.rock.transfer === 20, "rock class is 3 / 10 / 20");
 assert(E.TRUCK_CAPS.topsoil.small === 4 && E.TRUCK_CAPS.topsoil.dump === 12 && E.TRUCK_CAPS.topsoil.transfer === 24, "topsoil class is 4 / 12 / 24");
@@ -316,27 +316,28 @@ const wc30 = E.quote({
   materials: [{ ...wc, qty: 30 }],
 });
 assert(wc30.planned && wc30.loadCount === 2 && wc30.split === "Transfer 20 + Bobtail 10", "30 yd split label");
-assert(Math.abs(wc30.loads[0].deliveryFee - 280) < 0.01 && Math.abs(wc30.loads[1].deliveryFee - 135) < 0.01, "transfer $280 and bobtail $135");
-assert(Math.abs(wc30.deliveryFee - 415) < 0.01, "delivery fee is the sum of the load fees");
+assert(wc30.loads[1].truck === "dump" && wc30.loads[1].rate === 150, "the Willow Bobtail load is $150 an hour");
+assert(Math.abs(wc30.loads[0].deliveryFee - 280) < 0.01 && Math.abs(wc30.loads[1].deliveryFee - 262.5) < 0.01, "transfer $280 and Bobtail $262.50");
+assert(Math.abs(wc30.deliveryFee - 542.5) < 0.01, "delivery fee is the sum of the load fees");
 assert(Math.abs(wc30.materialsTotal - 375) < 0.01, "material price is charged once");
 assert(wc30.environmentalLoads === 2 && Math.abs(wc30.environmentalFee - 10) < 0.01, "Willow Creek environmental fee is $5 per load and visible on the quote");
 assert(wc30.formula.indexOf("Environmental fee (Willow Creek)") >= 0, "environmental fee is printed, not hidden in the material price");
 assert(Math.abs(wc30.willowFuelPerYd - 1.3) < 0.001 && Math.abs(wc30.willowFuel - 30) < 0.01, "Willow Creek material fuel is $1/ton, shown as $1.30/yd");
 assert(wc30.formula.indexOf("$1.30/yd") >= 0, "the yard fuel rate is on the formula");
-assert(Math.abs(wc30.total - 830) < 0.01, "invoice total includes delivery, materials, the $10 env fee, and the $30 fuel");
+assert(Math.abs(wc30.total - 957.5) < 0.01, "invoice total includes delivery, materials, the $10 env fee, and the $30 fuel");
 assert(wc30.loads[0].tripMin === wc30.loads[1].tripMin, "each load uses the same route");
 const lines = E.dispatchLines(wc30, "HD-30");
 assert(lines.length === 2 && lines[0].ticketId === "HD-30" && lines[1].ticketId === "HD-30", "two dispatch lines under one ticket");
-assert(lines[0].truck === "transfer" && lines[1].truck === "small", "dispatch lines follow the split");
+assert(lines[0].truck === "transfer" && lines[1].truck === "dump", "dispatch lines follow the split");
 
 const wc40 = E.quote({ oneWaySeconds: 30 * 60, truck: "small", billing: shop, materials: [{ ...wc, qty: 40 }] });
 assert(wc40.split === "Transfer 20 + Transfer 20" && Math.abs(wc40.deliveryFee - 560) < 0.01, "40 yd is two transfer fees");
 assert(E.dispatchLines(wc40, "HD-40").length === 2, "40 yd prints two dispatch lines");
 const wc10 = E.quote({ oneWaySeconds: 30 * 60, truck: "transfer", billing: shop, materials: [{ ...wc, qty: 10 }] });
-assert(wc10.loadCount === 1 && wc10.split === "Bobtail 10" && wc10.truck === "small", "10 yd pit rock stays the pit bobtail even if transfer was selected");
+assert(wc10.loadCount === 1 && wc10.split === "Bobtail 10" && wc10.truck === "dump" && wc10.rate === 150, "10 yd pit rock is the $150 Bobtail even if transfer was selected");
 assert(E.dispatchLines(wc10, "HD-10").length === 0, "one load stays a single delivery row");
 const ignoredLoads = E.quote({ oneWaySeconds: 30 * 60, truck: "dump", billing: shop, loads: 99, materials: [{ ...wc, qty: 10 }] });
-assert(ignoredLoads.loadCount === 1 && ignoredLoads.truck === "small", "the loads argument does not override the split");
+assert(ignoredLoads.loadCount === 1 && ignoredLoads.truck === "dump" && ignoredLoads.rate === 150, "the loads argument does not override the split");
 
 const piled = E.quote({
   oneWaySeconds: 30 * 60,
@@ -504,7 +505,7 @@ const separatePiles = E.quote({
     { ...rock, qty: 10 },
   ],
 });
-assert(separatePiles.loadCount === 2 && separatePiles.loads[0].truck === "small" && separatePiles.loads[1].truck === "dump", "10 yd pit rock is a bobtail and 10 yd store rock is a dump");
+assert(separatePiles.loadCount === 2 && separatePiles.loads[0].truck === "dump" && separatePiles.loads[0].rate === 150 && separatePiles.loads[1].truck === "dump", "10 yd pit rock is the $150 Bobtail and 10 yd store rock is a dump");
 const piledRocks = E.quote({
   oneWaySeconds: 30 * 60,
   truck: "dump",
@@ -693,6 +694,32 @@ assert(rock43.loads.map((load) => load.truck + ":" + load.yards + ":" + load.rat
 const forkLift = loadsOf(40, rockMat, "forklift");
 assert(forkLift.planned === false && forkLift.loads.length === 1 && forkLift.loads[0].truck === "forklift" && forkLift.loads[0].rate === 160, "forklift selection stays one forklift load at $160");
 assert(E.canonicalTruck("bobtail") === "dump" && E.canonicalTruck("small") === "small" && E.canonicalTruck("transfer") === "transfer" && E.canonicalTruck("forklift") === "forklift", "truck words map to the four ids");
+const willow108 = E.quote({
+  oneWaySeconds: 0,
+  truck: "transfer",
+  billing: { ...shop, surchargePercent: 15 },
+  materials: [{
+    id: "q-34-minus",
+    name: "3/4 Minus",
+    unit: "yd",
+    qty: 108,
+    price: 13 * (2619 / 2000),
+    tonPrice: 13,
+    unitPrice: 13 * (2619 / 2000),
+    tonsPerYard: 2619 / 2000,
+    book: "willow",
+    source: "quarry",
+  }],
+});
+assert(willow108.loads.map((load) => load.truck + ":" + load.yards + ":" + load.rate).join(",") === "transfer:20:160,transfer:20:160,transfer:20:160,transfer:20:160,transfer:20:160,dump:8:150", "108 yd Willow Creek is five transfers at $160 plus Bobtail 8 at $150");
+assert(willow108.split === "Transfer 20 + Transfer 20 + Transfer 20 + Transfer 20 + Transfer 20 + Bobtail 8", "108 yd split names the 8 as Bobtail");
+assert(!willow108.loads.some((load) => load.rate === 90), "the Willow Bobtail is not the $90 Small 550");
+assert(Math.abs(willow108.deliveryFee - 950) < 0.01, "108 yd delivery is 5×$160 + $150");
+assert(Math.abs(willow108.fuelSurcharge - 142.5) < 0.01, "15% fuel on $950 is $142.50");
+assert(Math.abs(willow108.materialsTotal - 1838.54) < 0.01, "108 yd at $13/ton and 2619 lb/yd is $1,838.54");
+assert(willow108.environmentalLoads === 6 && Math.abs(willow108.environmentalFee - 30) < 0.01, "six Willow loads are $30 environmental");
+assert(Math.abs(willow108.willowFuel - 140.4) < 0.01 && Math.abs(willow108.willowFuelPerYd - 1.3) < 0.001, "Willow fuel stays $1.30/yd, $140.40 on 108 yd");
+assert(Math.abs(willow108.total - 3101.44) < 0.01, "108 yd ticket total is $3,101.44");
 
 if (process.exitCode) {
   console.error("Engine tests failed.");

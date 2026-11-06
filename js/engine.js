@@ -227,8 +227,11 @@ window.HDEngine = {
     }
     for (let i = 0; i < full; i++) loads.push({ truck: "transfer", kind: "transfer", yards: transferCap, pile });
     if (rem > 0) {
-      if (rem <= smallCap + 1e-9) loads.push({ truck: "small", kind: "bobtail", yards: rem, pile });
-      else if (dumpCap > 0 && rem <= dumpCap + 1e-9) loads.push({ truck: "dump", kind: "dump", yards: rem, pile });
+      if (rem <= smallCap + 1e-9) {
+        // Willow's 10-yard slot is the displayed Bobtail, so it bills the Bobtail rate.
+        if (pile === "willow") loads.push({ truck: "dump", kind: "dump", yards: rem, pile });
+        else loads.push({ truck: "small", kind: "bobtail", yards: rem, pile });
+      } else if (dumpCap > 0 && rem <= dumpCap + 1e-9) loads.push({ truck: "dump", kind: "dump", yards: rem, pile });
       else loads.push({ truck: "transfer", kind: "transfer", yards: rem, pile });
     }
     return loads;

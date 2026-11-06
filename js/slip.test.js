@@ -174,7 +174,7 @@ assert.ok(multiHouse.includes("2 loads: Transfer 20 + Bobtail 10"), "house sheet
 assert.ok(multiCustomer.includes("Environmental fee (Willow Creek)"), "Willow Creek environmental fee is on the receipt");
 assert.ok(multiCustomer.includes("$1.30/yd"), "Willow Creek material fuel is shown as $1.30/yd");
 assert.ok(multiCustomer.includes("<td>tote bagging, spread, additional service</td><td></td>"), "blank tote line prints with no amount");
-assert.ok(multiCustomer.includes("Dispatch — Transfer Truck") && multiCustomer.includes("Dispatch — Small Truck 550"), "dispatch lines name the trucks in the split");
+assert.ok(multiCustomer.includes("Dispatch — Transfer Truck") && multiCustomer.includes("Dispatch — Bobtail truck") && !multiCustomer.includes("Dispatch — Small Truck 550"), "the Willow remainder dispatches as Bobtail truck, not Small 550");
 assert.ok(!multiCustomer.includes("Delivery — Dump"), "a multi-load invoice does not collapse the trucks into one delivery row");
 const multiFees = run("HDEngine.money(__multi.loads[0].deliveryFee)") + " " + run("HDEngine.money(__multi.loads[1].deliveryFee)");
 assert.ok(multiCustomer.includes(run("HDEngine.money(__multi.loads[0].deliveryFee)")) && multiCustomer.includes(run("HDEngine.money(__multi.loads[1].deliveryFee)")), "each dispatch line shows its own fee (" + multiFees + ")");
@@ -440,5 +440,36 @@ assert.strictEqual(run("defaultRateFor('dump')"), 150, "dump's rate is $150");
 assert.strictEqual(run("defaultRateFor('transfer')"), 160, "transfer's rate is $160");
 assert.strictEqual(run("defaultRateFor('forklift')"), 160, "forklift's rate is $160");
 assert.notStrictEqual(run("defaultRateFor('bobtail')"), run("defaultRateFor('small')"), "Bobtail is not priced as the Small 550");
+
+run(`
+  var __tpy = 2619 / 2000;
+  var __unit = 13 * __tpy;
+  var __w108 = HDEngine.quote({
+    oneWaySeconds: 0, truck: "transfer",
+    billing: Object.assign({}, db.settings.billing, { surchargePercent: 15, minimumHours: 1, loadMinutes: 15, unloadMinutes: 15 }),
+    materials: [{ id: "q-34-minus", name: "3/4 Minus", unit: "yd", qty: 108, price: __unit, tonPrice: 13, unitPrice: __unit, tonsPerYard: __tpy, book: "willow", source: "quarry" }]
+  });
+  var __wTicket = { id: "HD-108", createdAt: new Date().toISOString(), customer: "Pit 108", address: "1 Quarry Rd", yardId: "willow", truck: "transfer", status: "new", materials: __w108.lines, quote: __w108 };
+  buildPrint(__wTicket);
+  var __wHref = "";
+  openMailto = function (h) { __wHref = h; };
+  emailAccounting(__wTicket);
+`);
+const wHtml = els["print-root"].innerHTML;
+const wCustomer = wHtml.slice(wHtml.indexOf('<section class="sheet customer">'), wHtml.indexOf('<section class="sheet waiver">'));
+const wHouse = wHtml.slice(wHtml.indexOf('<section class="sheet house">'));
+const wMail = decodeURIComponent(run("__wHref"));
+const split108 = "Transfer 20 + Transfer 20 + Transfer 20 + Transfer 20 + Transfer 20 + Bobtail 8";
+assert.ok(wHouse.includes(split108) && wMail.includes(split108), "house sheet and draft email show the 108 yd split");
+for (const surface of [wCustomer, wHouse, wMail]) {
+  assert.ok(surface.includes("$950.00"), "108 yd delivery is $950");
+  assert.ok(surface.includes("$1,838.54"), "108 yd materials are $1,838.54");
+  assert.ok(surface.includes("$30.00"), "108 yd environmental fee is $30");
+  assert.ok(surface.includes("$140.40"), "108 yd Willow fuel is $140.40");
+  assert.ok(surface.includes("$3,101.44"), "108 yd total is $3,101.44");
+}
+assert.ok(wCustomer.includes("$142.50") && wMail.includes("$142.50"), "customer copy and draft email show the $142.50 fuel surcharge");
+assert.ok(wCustomer.includes("Dispatch — Bobtail truck") && wHouse.includes("Bobtail truck") && !wCustomer.includes("Small Truck 550"), "the 8-yard load is Bobtail truck, not Small 550");
+assert.ok(wMail.startsWith("mailto:"), "the 108 yd draft is a mailto and is not sent");
 
 console.log("slip.test.js OK");
