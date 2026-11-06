@@ -190,8 +190,8 @@ run(`
   state.boardView = "live";
   renderBoard();
 `);
-assert.ok(els["job-table"].innerHTML.includes("2 loads: Transfer 20 + Dump 10"), "live board shows the 30 yd rock split");
-assert.ok(els["job-table"].innerHTML.includes("2 loads: Transfer 24 + Dump 6"), "live board shows the 30 yd topsoil split");
+assert.ok(els["job-table"].innerHTML.includes("2 loads: Transfer 20 + Bobtail 10"), "live board shows the 30 yd rock split");
+assert.ok(els["job-table"].innerHTML.includes("2 loads: Transfer 24 + Bobtail 6"), "live board shows the 30 yd topsoil split");
 
 const upgraded = json(`(function () {
   var store = normalizeStore({

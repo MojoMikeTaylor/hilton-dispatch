@@ -223,7 +223,7 @@ window.HDEngine = {
     if (load.kind === "bobtail" || load.truck === "small") return "Bobtail";
     if (load.kind === "transfer" || load.truck === "transfer") return "Transfer";
     if (load.truck === "forklift") return "Forklift";
-    if (load.truck === "dump") return "Dump";
+    if (load.truck === "dump") return "Bobtail";
     return "Truck";
   },
 
@@ -403,9 +403,22 @@ window.HDEngine = {
     return { price: retail, transferOnly: false };
   },
 
-  // Line amounts use the price already on the row. A yard row's price is the yard
-  // price (ton price × tons per yard), applied once when the row was added.
-  // Multiplying again, or turning that yard price back into a ton price, would undo it.
+  // null and "" are missing. Number(null) is 0, so a missing yard price must not bill $0.
+  usableUnitPrice(v) {
+    if (v == null || v === "") return null;
+    if (typeof v === "number") return isFinite(v) ? v : null;
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (!t) return null;
+      const n = Number(t);
+      return isFinite(n) ? n : null;
+    }
+    return null;
+  },
+
+  // Line amounts use the price already on the row. A yard row bills unitPrice when
+  // that value is a real number. A missing unitPrice falls back to the line price.
+  // The phone $/ton stays on tonPrice and is not applied again.
   // Ton rows stay tons. The load plan reads these same qtys; this does not resize them.
   priceLines(materials, plan) {
     return (materials || []).map((m) => {
@@ -413,9 +426,8 @@ window.HDEngine = {
       const pricedLine = this.linePrice(m, plan);
       const unit = this.normText(m && m.unit);
       const yard = unit === "yd" || unit === "yard" || unit === "yards";
-      const storedUnit = Number(m && m.unitPrice);
-      const hasUnit = isFinite(storedUnit);
-      // A yard line bills unitPrice. The phone $/ton stays on tonPrice and is not applied again.
+      const storedUnit = this.usableUnitPrice(m && m.unitPrice);
+      const hasUnit = storedUnit != null;
       const price = (yard && hasUnit && !pricedLine.transferOnly) ? storedUnit : pricedLine.price;
       const tpy = Number(m && m.tonsPerYard);
       const hasWeight = isFinite(tpy) && tpy > 0;
@@ -423,7 +435,7 @@ window.HDEngine = {
         ...m,
         qty,
         price,
-        unitPrice: hasUnit ? storedUnit : m.unitPrice,
+        unitPrice: hasUnit ? storedUnit : undefined,
         tonPrice: m && m.tonPrice,
         transferOnly: pricedLine.transferOnly,
         amount: Number((qty * price).toFixed(2)),

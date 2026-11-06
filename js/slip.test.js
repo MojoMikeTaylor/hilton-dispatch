@@ -212,7 +212,7 @@ run(`
 const r30 = els["print-root"].innerHTML;
 const r30House = r30.slice(r30.indexOf('<section class="sheet house">'));
 const r30Customer = r30.slice(r30.indexOf('<section class="sheet customer">'), r30.indexOf('<section class="sheet waiver">'));
-assert.ok(r30House.includes("2 loads: Transfer 20 + Dump 10"), "house sheet shows 30 yd rock as 1 transfer + 1 dump");
+assert.ok(r30House.includes("2 loads: Transfer 20 + Bobtail 10"), "house sheet shows 30 yd rock as 1 transfer + 1 bobtail");
 assert.ok(r30Customer.includes("Dispatch — Transfer Truck") && r30Customer.includes("Dispatch — Bobtail truck"), "customer receipt shows both trucks");
 assert.strictEqual((r30Customer.match(/data-ticket="HD-R30"/g) || []).length, 2, "30 yd rock is one invoice");
 assert.ok(r30Customer.includes("Total " + run("HDEngine.money(__r30.total)")), "30 yd rock prints one total");
@@ -230,7 +230,7 @@ run(`
 const s30 = els["print-root"].innerHTML;
 const s30House = s30.slice(s30.indexOf('<section class="sheet house">'));
 const s30Customer = s30.slice(s30.indexOf('<section class="sheet customer">'), s30.indexOf('<section class="sheet waiver">'));
-assert.ok(s30House.includes("2 loads: Transfer 24 + Dump 6"), "house sheet shows 30 yd topsoil as transfer 24 plus the remainder");
+assert.ok(s30House.includes("2 loads: Transfer 24 + Bobtail 6"), "house sheet shows 30 yd topsoil as transfer 24 plus the remainder");
 assert.ok(s30Customer.includes("Total " + run("HDEngine.money(__s30.total)")), "30 yd topsoil is one invoice");
 assert.ok(s30Customer.includes("<td>tote bagging, spread, additional service</td><td></td>"), "tote line is blank when unset");
 assert.ok(!s30Customer.includes("Spreading") && !s30.includes("spread fee"), "spreading is not its own fee");
@@ -295,5 +295,80 @@ assert.strictEqual(duplicateConfirms, 0, "the duplicate warning does not ask for
 assert.ok(run(`db.jobs.some(function (j) { return j.id === ${JSON.stringify(savedId)} && j.customer === "Ada Lovelace" && j.status === "quote"; })`), "the new quote is stored");
 run(`openTicket("Q-HIGH")`);
 assert.strictEqual(run("state.draft.id"), "Q-HIGH", "Open loads the existing quote");
+
+// Desk price edit: unitPrice follows a typed yard price. Qty and name do not reprice. Phone $/ton stays.
+run(`
+  state.draft = blankDraft();
+  state.route = null;
+  state.draft.materials = [{
+    id: "q-34-minus", name: "3/4 Minus", category: "Willow Creek quarry", unit: "yd", qty: 10,
+    price: 13 * 1.3095, tonPrice: 13, unitPrice: 13 * 1.3095, tonsPerYard: 1.3095,
+    book: "willow", source: "quarry", truckload_only: true
+  }];
+`);
+assert(Math.abs(run("currentQuote().materialsTotal") - 170.24) < 0.001, "10 yd of 3/4 Minus still prices at $170.24 before a desk edit");
+function lineEdit(k, value) {
+  ctx.onLineEdit({ target: { dataset: { k: k, line: "0" }, value: String(value) } });
+}
+lineEdit("price", "99");
+assert.strictEqual(run("state.draft.materials[0].price"), 99, "a price edit writes the typed yard price");
+assert.strictEqual(run("state.draft.materials[0].unitPrice"), 99, "a price edit updates unitPrice");
+assert.strictEqual(run("state.draft.materials[0].tonPrice"), 13, "a price edit leaves the phone $/ton");
+assert(Math.abs(run("currentQuote().materialsTotal") - 990) < 0.01, "10 yd at the edited $99 yard price is $990");
+lineEdit("qty", "8");
+assert.strictEqual(run("state.draft.materials[0].qty"), 8, "a qty edit changes the quantity");
+assert.strictEqual(run("state.draft.materials[0].unitPrice"), 99, "a qty edit does not change unitPrice");
+assert.strictEqual(run("state.draft.materials[0].tonPrice"), 13, "a qty edit does not change the phone price");
+assert(Math.abs(run("currentQuote().materialsTotal") - 792) < 0.01, "8 yd at $99 is $792");
+lineEdit("name", "3/4 Minus renamed");
+assert.strictEqual(run("state.draft.materials[0].name"), "3/4 Minus renamed", "a name edit changes the name");
+assert.strictEqual(run("state.draft.materials[0].unitPrice"), 99, "a name edit does not change unitPrice");
+assert.strictEqual(run("state.draft.materials[0].price"), 99, "a name edit does not change the yard price");
+lineEdit("unit", "ton");
+assert.strictEqual(run("state.draft.materials[0].unit"), "yd", "a weighted quarry row stays in yards");
+assert.strictEqual(run("state.draft.materials[0].unitPrice"), 99, "a unit edit does not reprice the row");
+lineEdit("unit", "yards");
+assert.strictEqual(run("state.draft.materials[0].unit"), "yards", "yards is a yard unit");
+run(`state.draft.materials = [{ id: "q-jaw-run", name: "Jaw Run", unit: "ton", qty: 4, price: 12.5, tonPrice: 12.5, book: "willow", source: "quarry" }];`);
+lineEdit("price", "11");
+assert.strictEqual(run("state.draft.materials[0].price"), 11, "a ton row price edit changes price");
+assert.strictEqual(run("state.draft.materials[0].unitPrice"), undefined, "a ton row price edit does not invent a yard unitPrice");
+assert.strictEqual(run("state.draft.materials[0].tonPrice"), 12.5, "a ton row price edit leaves the phone price");
+lineEdit("unit", "yd");
+assert.strictEqual(run("state.draft.materials[0].unit"), "ton", "a quarry row with no yard weight stays tons");
+run(`state.draft.materials = [{ id: "topsoil", name: "Topsoil", unit: "yd", qty: 4, price: 25, book: "store" }];`);
+lineEdit("price", "30");
+assert.strictEqual(run("state.draft.materials[0].price"), 30, "a store price edit changes the yard price");
+assert.strictEqual(run("state.draft.materials[0].unitPrice"), undefined, "a store price edit does not add a quarry unitPrice");
+assert(Math.abs(run("currentQuote().materialsTotal") - 120) < 0.01, "4 yd of edited topsoil is $120");
+
+run(`
+  var __flag = HDEngine.quote({
+    truck: "dump", oneWaySeconds: 0, billing: db.settings.billing,
+    materials: [
+      { id: "q-jaw-run", name: "Jaw Run", qty: 4, unit: "ton", price: 12.5, book: "willow", source: "quarry" },
+      { id: "q-crushed-asphalt", name: "Crushed Asphalt", qty: 10, unit: "yd", price: 26, tonPrice: 20, unitPrice: 26, tonsPerYard: 1.3, book: "willow", source: "quarry" },
+      { id: "topsoil", name: "Topsoil", qty: 3, unit: "yd", price: 25, book: "store" }
+    ]
+  });
+  var __flagTicket = {
+    id: "HD-FLAG", createdAt: new Date().toISOString(), customer: "Flag Co", address: "1 Yard Rd",
+    yardId: "cp", truck: "dump", status: "new", materials: __flag.lines, quote: __flag
+  };
+  buildPrint(__flagTicket);
+  var __flagHref = "";
+  openMailto = function (h) { __flagHref = h; };
+  emailAccounting(__flagTicket);
+`);
+const flagHtml = els["print-root"].innerHTML;
+const flagCustomer = flagHtml.slice(flagHtml.indexOf('<section class="sheet customer">'), flagHtml.indexOf('<section class="sheet waiver">'));
+const flagHouse = flagHtml.slice(flagHtml.indexOf('<section class="sheet house">'));
+const flagMail = decodeURIComponent(run("__flagHref"));
+assert.ok(flagCustomer.includes("Jaw Run — Missing yard weight"), "customer receipt flags a missing yard weight");
+assert.ok(flagHouse.includes("Jaw Run — Missing yard weight"), "house sheet flags a missing yard weight");
+assert.ok(flagMail.includes("Jaw Run @ $12.50 = $50.00 — Missing yard weight"), "the draft email flags a missing yard weight");
+assert.ok(!flagCustomer.includes("Crushed Asphalt — Missing yard weight") && !flagHouse.includes("Crushed Asphalt — Missing yard weight") && !flagMail.includes("Crushed Asphalt @ $26.00 = $260.00 — Missing yard weight"), "a yard-weighted row is not flagged");
+assert.ok(!flagCustomer.includes("Topsoil — Missing yard weight") && !flagHouse.includes("Topsoil — Missing yard weight") && !flagMail.includes("Topsoil @ $25.00 = $75.00 — Missing yard weight"), "a store row is not flagged");
+assert.ok(flagMail.startsWith("mailto:"), "the draft stays a mailto and is not sent");
 
 console.log("slip.test.js OK");

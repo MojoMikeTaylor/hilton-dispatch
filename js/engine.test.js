@@ -389,7 +389,7 @@ const rock30 = E.quote({
 });
 assert(rock30.loadCount === 2 && rock30.loads[0].truck === "transfer" && rock30.loads[0].yards === 20, "30 yd store rock starts with a transfer");
 assert(rock30.loads[1].truck === "dump" && rock30.loads[1].kind === "dump" && rock30.loads[1].yards === 10, "30 yd store rock remainder is a dump, not a second transfer");
-assert(rock30.split === "Transfer 20 + Dump 10", "30 yd store rock is 1 transfer + 1 dump");
+assert(rock30.split === "Transfer 20 + Bobtail 10", "30 yd store rock is 1 transfer + 1 bobtail");
 assert(rock30.loads[1].rate === 150 && Math.abs(rock30.loads[1].multiplier - 1.08) < 0.001, "the dump stays $150 with the road buffer");
 assert(Math.abs(rock30.loads[0].deliveryFee - 280) < 0.01 && Math.abs(rock30.loads[1].deliveryFee - 262.5) < 0.01, "30 yd rock delivery is transfer $280 plus dump $262.50");
 assert(Math.abs(rock30.materialsTotal - 840) < 0.01, "30 yd of 3/4 minus at $28 is $840");
@@ -412,7 +412,7 @@ const top30 = E.quote({
   billing: shop,
   materials: [{ id: "topsoil", name: "Topsoil", category: "Soils", unit: "yd", price: 25, qty: 30, book: "store" }],
 });
-assert(top30.loadCount === 2 && top30.split === "Transfer 24 + Dump 6", "30 yd topsoil is transfer 24 plus the 6 yd remainder");
+assert(top30.loadCount === 2 && top30.split === "Transfer 24 + Bobtail 6", "30 yd topsoil is transfer 24 plus the 6 yd remainder");
 assert(top30.loads[0].truck === "transfer" && top30.loads[0].yards === 24, "the first topsoil load is a 24 yd transfer");
 assert(top30.loads[1].truck === "dump" && top30.loads[1].yards === 6, "6 yd of topsoil fits the dump, not Small 550");
 assert(!top30.lines[0].transferOnly && Math.abs(top30.lines[0].price - 25) < 0.01, "a split topsoil order keeps the $25 yard POS price");
@@ -648,6 +648,20 @@ assert(minus10.lines[0].tonPrice === 13 && Math.abs(minus10.lines[0].unitPrice -
 const minusAgain = E.priceLines(minus10.lines);
 assert(Math.abs(minusAgain[0].amount - 170.24) < 0.001 && minusAgain[0].qty === 10, "the sheet yard price is not multiplied by tons per yard a second time");
 assert(Math.abs(minus10.environmentalFee - 5) < 0.01 && Math.abs(minus10.willowFuelPerYd - 1.3) < 0.001, "3/4 Minus keeps the $5 load fee and the $1.30/yd fuel rate");
+assert(E.loadTitle({ truck: "dump", kind: "dump" }) === "Bobtail", "the visible dump load title is Bobtail");
+assert(rock30.split === "Transfer 20 + Bobtail 10" && top30.split === "Transfer 24 + Bobtail 6", "split text says Bobtail, not Dump");
+[null, undefined, NaN, Infinity, -Infinity, "", "   ", "nope", true, false].forEach((bad) => {
+  const line = E.priceLines([{
+    name: "Crushed Asphalt", unit: "yd", qty: 10, price: 26, tonPrice: 20, unitPrice: bad, tonsPerYard: 1.3, book: "willow",
+  }])[0];
+  assert(Math.abs(line.amount - 260) < 0.01 && Math.abs(line.price - 26) < 0.001, "unitPrice " + String(bad) + " is not a yard price and does not bill $0");
+});
+const explicitZero = E.priceLines([{
+  name: "Crushed Asphalt", unit: "yd", qty: 10, price: 26, unitPrice: 0, tonsPerYard: 1.3, book: "willow",
+}])[0];
+assert(explicitZero.amount === 0 && explicitZero.price === 0, "a typed zero yard price is kept");
+const soilNull = E.priceLines([{ id: "topsoil", name: "Topsoil", unit: "yd", qty: 4, price: 25, unitPrice: null, book: "store" }])[0];
+assert(Math.abs(soilNull.amount - 100) < 0.01 && !soilNull.missingYardWeight, "a null unitPrice does not zero a store yard line");
 
 if (process.exitCode) {
   console.error("Engine tests failed.");

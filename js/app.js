@@ -1434,6 +1434,10 @@ function onLineEdit(e) {
   const k = t.dataset.k;
   if (k === "qty" || k === "price") m[k] = Number(t.value) || 0;
   else m[k] = t.value;
+  if (k === "price" && HDCatalog.isQuarry(m) && HDCatalog.tonsPerYardOf(m)) {
+    const unit = String(m.unit || "").toLowerCase();
+    if (unit === "yd" || unit === "yard" || unit === "yards") m.unitPrice = m.price;
+  }
   if (HDCatalog.isQuarry(m) && k === "unit") {
     const yard = HDCatalog.tonsPerYardOf(m);
     const v = String(t.value || "").toLowerCase();
@@ -2028,7 +2032,7 @@ function buildPrint(ticket) {
   const when = new Date(ticket.createdAt || Date.now()).toLocaleString();
   const quarry = ticket.quarryDirect || isQuarryYard(ticket.yardId);
   const matRows = (q.lines || []).map((l) =>
-    `<tr><td>${esc(l.name)}</td><td>${l.qty} ${esc(l.unit)}</td><td>${HDEngine.money(l.price)}</td><td>${HDEngine.money(l.amount)}</td></tr>`
+    `<tr><td>${esc(l.name)}${l.missingYardWeight ? " — Missing yard weight" : ""}</td><td>${l.qty} ${esc(l.unit)}</td><td>${HDEngine.money(l.price)}</td><td>${HDEngine.money(l.amount)}</td></tr>`
   ).join("") || `<tr><td colspan="4">No materials</td></tr>`;
   const steps = ((ticket.route && ticket.route.steps) || []).slice(0, 18)
     .map((s) => `<li>${esc(s.instruction)} <span class="muted">(${s.miles.toFixed(1)} mi)</span></li>`).join("");
@@ -2151,7 +2155,11 @@ function buildPrint(ticket) {
       <h3>Load</h3>
       ${splitText ? `<p class="load-split"><strong>Loads:</strong> ${esc(splitText)}</p>` : ""}
       <table><thead><tr><th>Material</th><th>Qty</th></tr></thead><tbody>
-        ${(ticket.materials || []).map((m) => `<tr><td>${esc(m.name)}</td><td>${m.qty} ${esc(m.unit)}</td></tr>`).join("") || "<tr><td colspan=2>See dispatcher</td></tr>"}
+        ${(ticket.materials || []).map((m, i) => {
+          const quoted = (q.lines || [])[i];
+          const missing = !!((m && m.missingYardWeight) || (quoted && quoted.missingYardWeight));
+          return `<tr><td>${esc(m.name)}${missing ? " — Missing yard weight" : ""}</td><td>${m.qty} ${esc(m.unit)}</td></tr>`;
+        }).join("") || "<tr><td colspan=2>See dispatcher</td></tr>"}
       </tbody></table>
       ${q.loadCount > 1 ? `<h3>Dispatch</h3><table>${dispatchRows}</table>` : ""}
       <p><strong>Scale weight:</strong> Gross ____________ &nbsp; Tare ____________ &nbsp; Net ____________ &nbsp; Scale ticket # ____________</p>
@@ -2216,7 +2224,7 @@ function emailAccounting(ticket) {
     q.formula,
     ``,
     `Materials:`,
-    ...(q.lines || []).map((l) => `  - ${l.qty} ${l.unit} ${l.name} @ ${HDEngine.money(l.price)} = ${HDEngine.money(l.amount)}`),
+    ...(q.lines || []).map((l) => `  - ${l.qty} ${l.unit} ${l.name} @ ${HDEngine.money(l.price)} = ${HDEngine.money(l.amount)}${l.missingYardWeight ? " — Missing yard weight" : ""}`),
     ``,
     `TOTAL DUE: ${HDEngine.money(q.total)}`,
     `Payment: ${HDReceipt.paymentLine(ticket)}`,
