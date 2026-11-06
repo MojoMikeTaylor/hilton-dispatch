@@ -273,9 +273,9 @@ function splitOf(qty, material, truck) {
   return q.loads.map((load) => (load.truck === "transfer" ? "T" : load.truck === "small" ? "B" : load.truck === "dump" ? "D" : load.truck)).join("+");
 }
 const wc = { id: "q-jaw-run", name: "Jaw Run", unit: "ton", price: 12.5, book: "willow", source: "quarry", truckload_only: true };
-assert(splitOf(30, wc) === "T+T", "30 yd pit rock on Bobtail does not drop the remainder onto Small 550");
+assert(splitOf(30, wc) === "T+B", "30 yd Willow Creek rock stays 1 transfer + 1 bobtail");
 assert(splitOf(40, wc) === "T+T", "40 yd Willow Creek rock is 2 transfers");
-assert(splitOf(10, wc) === "T", "10 yd pit rock on Bobtail stays off the Small 550");
+assert(splitOf(10, wc) === "B", "10 yd Willow Creek rock is 1 bobtail");
 assert(splitOf(10, wc, "small") === "B", "10 yd pit rock on Small 550 is still the small truck");
 assert(E.TRUCK_CAPS.willow.dump === 0 && E.TRUCK_CAPS.willow.small === 10 && E.TRUCK_CAPS.willow.transfer === 20, "Willow Creek named rule stays bobtail 10 / transfer 20 with no dump");
 assert(E.TRUCK_CAPS.rock.small === 3 && E.TRUCK_CAPS.rock.dump === 10 && E.TRUCK_CAPS.rock.transfer === 20, "rock class is 3 / 10 / 20");
@@ -288,7 +288,7 @@ assert(splitOf(4, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }) ===
 assert(splitOf(4, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }, "small") === "B", "4 yd topsoil on Small 550 still fits the small truck");
 assert(splitOf(12, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }) === "D", "12 yd topsoil is one dump");
 assert(splitOf(24, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }) === "T", "24 yd topsoil is 1 transfer");
-assert(splitOf(25, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }) === "T+D", "25 yd topsoil on Bobtail keeps the remainder on a dump");
+assert(splitOf(25, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }) === "T+B", "25 yd topsoil remainder fits the Small 550");
 assert(splitOf(25, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }, "small") === "T+B", "25 yd topsoil on Small 550 still puts the 1 yd remainder on a small truck");
 assert(splitOf(30, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }) === "T+D", "30 yd topsoil is transfer 24 plus a dump");
 assert(splitOf(36, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }) === "T+D", "36 yd topsoil remainder fits a dump");
@@ -300,7 +300,7 @@ assert(splitOf(50, { id: "fresh-fines", name: "Fresh Fines Bark", unit: "yd", pr
 assert(splitOf(15, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 27 }) === "T", "15 yd forest loam is 1 transfer");
 assert(splitOf(16, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 27 }) === "T", "16 yd forest loam is 1 transfer");
 assert(splitOf(30, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 27 }) === "T", "30 yd forest loam is 1 transfer");
-assert(splitOf(31, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 27 }) === "T+D", "31 yd forest loam on Bobtail keeps the remainder on a dump");
+assert(splitOf(31, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 27 }) === "T+B", "31 yd forest loam remainder fits the Small 550");
 assert(splitOf(31, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 27 }, "small") === "T+B", "31 yd forest loam on Small 550 still puts the remainder on a small truck");
 assert(splitOf(45, { id: "topsoil-plus", name: "Topsoil Plus", unit: "yd", price: 34 }) === "T+T", "45 yd topsoil plus remainder is another transfer");
 assert(splitOf(46, { id: "topsoil-plus", name: "Topsoil Plus", unit: "yd", price: 34 }) === "T+T", "46 yd topsoil plus is 2 transfers");
@@ -315,29 +315,28 @@ const wc30 = E.quote({
   yardId: "willow",
   materials: [{ ...wc, qty: 30 }],
 });
-assert(wc30.planned && wc30.loadCount === 2 && wc30.split === "Transfer 20 + Transfer 10", "30 yd pit rock on Bobtail is two transfers");
-assert(wc30.loads[0].rate === 160 && wc30.loads[1].rate === 160, "both pit loads bill the transfer rate");
-assert(Math.abs(wc30.loads[0].deliveryFee - 280) < 0.01 && Math.abs(wc30.loads[1].deliveryFee - 280) < 0.01, "each transfer is $280");
-assert(Math.abs(wc30.deliveryFee - 560) < 0.01, "delivery fee is the sum of the load fees");
+assert(wc30.planned && wc30.loadCount === 2 && wc30.split === "Transfer 20 + Bobtail 10", "30 yd split label");
+assert(Math.abs(wc30.loads[0].deliveryFee - 280) < 0.01 && Math.abs(wc30.loads[1].deliveryFee - 135) < 0.01, "transfer $280 and bobtail $135");
+assert(Math.abs(wc30.deliveryFee - 415) < 0.01, "delivery fee is the sum of the load fees");
 assert(Math.abs(wc30.materialsTotal - 375) < 0.01, "material price is charged once");
 assert(wc30.environmentalLoads === 2 && Math.abs(wc30.environmentalFee - 10) < 0.01, "Willow Creek environmental fee is $5 per load and visible on the quote");
 assert(wc30.formula.indexOf("Environmental fee (Willow Creek)") >= 0, "environmental fee is printed, not hidden in the material price");
 assert(Math.abs(wc30.willowFuelPerYd - 1.3) < 0.001 && Math.abs(wc30.willowFuel - 30) < 0.01, "Willow Creek material fuel is $1/ton, shown as $1.30/yd");
 assert(wc30.formula.indexOf("$1.30/yd") >= 0, "the yard fuel rate is on the formula");
-assert(Math.abs(wc30.total - 975) < 0.01, "invoice total includes delivery, materials, the $10 env fee, and the $30 fuel");
+assert(Math.abs(wc30.total - 830) < 0.01, "invoice total includes delivery, materials, the $10 env fee, and the $30 fuel");
 assert(wc30.loads[0].tripMin === wc30.loads[1].tripMin, "each load uses the same route");
 const lines = E.dispatchLines(wc30, "HD-30");
 assert(lines.length === 2 && lines[0].ticketId === "HD-30" && lines[1].ticketId === "HD-30", "two dispatch lines under one ticket");
-assert(lines[0].truck === "transfer" && lines[1].truck === "transfer", "dispatch lines follow the split");
+assert(lines[0].truck === "transfer" && lines[1].truck === "small", "dispatch lines follow the split");
 
 const wc40 = E.quote({ oneWaySeconds: 30 * 60, truck: "small", billing: shop, materials: [{ ...wc, qty: 40 }] });
 assert(wc40.split === "Transfer 20 + Transfer 20" && Math.abs(wc40.deliveryFee - 560) < 0.01, "40 yd is two transfer fees");
 assert(E.dispatchLines(wc40, "HD-40").length === 2, "40 yd prints two dispatch lines");
 const wc10 = E.quote({ oneWaySeconds: 30 * 60, truck: "transfer", billing: shop, materials: [{ ...wc, qty: 10 }] });
-assert(wc10.loadCount === 1 && wc10.split === "Transfer 10" && wc10.truck === "transfer" && wc10.rate === 160, "10 yd on a transfer stays a transfer");
+assert(wc10.loadCount === 1 && wc10.split === "Bobtail 10" && wc10.truck === "small", "10 yd pit rock stays the pit bobtail even if transfer was selected");
 assert(E.dispatchLines(wc10, "HD-10").length === 0, "one load stays a single delivery row");
 const ignoredLoads = E.quote({ oneWaySeconds: 30 * 60, truck: "dump", billing: shop, loads: 99, materials: [{ ...wc, qty: 10 }] });
-assert(ignoredLoads.loadCount === 1 && ignoredLoads.truck === "transfer" && ignoredLoads.rate === 160, "the loads argument does not override the split");
+assert(ignoredLoads.loadCount === 1 && ignoredLoads.truck === "small", "the loads argument does not override the split");
 
 const piled = E.quote({
   oneWaySeconds: 30 * 60,
@@ -411,7 +410,7 @@ const rock10 = E.quote({
   billing: shop,
   materials: [{ ...rock, qty: 10 }],
 });
-assert(rock10.loadCount === 1 && rock10.truck === "transfer" && rock10.rate === 160, "10 yd store rock on a transfer stays a transfer at $160");
+assert(rock10.loadCount === 1 && rock10.truck === "dump" && rock10.rate === 150, "10 yd store rock selects the dump at $150");
 
 const top30 = E.quote({
   oneWaySeconds: 30 * 60,
@@ -505,7 +504,7 @@ const separatePiles = E.quote({
     { ...rock, qty: 10 },
   ],
 });
-assert(separatePiles.loadCount === 2 && separatePiles.loads[0].truck === "transfer" && separatePiles.loads[1].truck === "dump", "10 yd pit rock on Bobtail is a transfer and 10 yd store rock is a dump");
+assert(separatePiles.loadCount === 2 && separatePiles.loads[0].truck === "small" && separatePiles.loads[1].truck === "dump", "10 yd pit rock is a bobtail and 10 yd store rock is a dump");
 const piledRocks = E.quote({
   oneWaySeconds: 30 * 60,
   truck: "dump",
@@ -594,7 +593,7 @@ assert(asphalt10.lines[0].unit === "yd" && asphalt10.lines[0].qty === 10 && Math
 assert(!asphalt10.lines[0].missingYardWeight, "Crushed Asphalt has Mike's yard weight");
 assert(asphalt10.environmentalLoads === 1 && Math.abs(asphalt10.environmentalFee - 5) < 0.01, "the $5 per load environmental fee stays outside the material total");
 assert(Math.abs(asphalt10.willowFuelPerYd - 1.3) < 0.001 && Math.abs(asphalt10.willowFuel - 13) < 0.01 && Math.abs(asphalt10.willowFuel - (10 * 1.188)) > 0.01, "Willow fuel stays $1.30/yd and is not the product tons per yard");
-assert(asphalt10.formula.indexOf("$1.30/yd") >= 0 && asphalt10.split === "Transfer 10" && asphalt10.loads[0].rate === 160, "10 yd of pit rock on Bobtail is a transfer and the fuel rate still prints");
+assert(asphalt10.formula.indexOf("$1.30/yd") >= 0 && asphalt10.split === "Bobtail 10", "10 yd of pit rock is one bobtail and the fuel rate still prints");
 assert(Math.abs(asphalt10.total - (asphalt10.deliveryFee + 237.6 + 5 + 13)) < 0.01, "delivery, the $237.60, the $5 fee, and the fuel stay separate");
 const asphaltAgain = E.priceLines(asphalt10.lines);
 assert(asphaltAgain[0].qty === 10 && Math.abs(asphaltAgain[0].price - 23.76) < 0.001 && Math.abs(asphaltAgain[0].amount - 237.6) < 0.001, "pricing the yard line again does not invert it");
@@ -613,7 +612,7 @@ const asphalt26 = E.quote({
   billing: shop,
   materials: [{ id: "q-crushed-asphalt", name: "Crushed Asphalt", unit: "yd", qty: 26, price: 26, tonPrice: 20, tonsPerYard: 1.3, book: "willow" }],
 });
-assert(asphalt26.split === "Transfer 20 + Transfer 6" && Math.abs(asphalt26.materialsTotal - 676) < 0.01, "the load plan uses the yard qty, not a second ton conversion");
+assert(asphalt26.split === "Transfer 20 + Bobtail 6" && Math.abs(asphalt26.materialsTotal - 676) < 0.01, "the load plan uses the yard qty, not a second ton conversion");
 const jawMissing = E.quote({
   oneWaySeconds: 0,
   truck: "dump",
@@ -684,9 +683,13 @@ assert(bobtailWord.loads[0].truck === "dump" && bobtailWord.loads[0].rate === 15
 const small3 = loadsOf(3, rockMat, "small");
 assert(small3.loads[0].truck === "small" && small3.loads[0].rate === 90, "Small 550 selection bills 3 yd rock at $90");
 const transfer30 = loadsOf(30, soilMat, "transfer");
-assert(transfer30.loads.map((load) => load.truck + ":" + load.yards + ":" + load.rate).join(",") === "transfer:24:160,transfer:6:160", "transfer selection keeps 30 yd topsoil on transfers");
+assert(transfer30.loads.map((load) => load.truck + ":" + load.yards + ":" + load.rate).join(",") === "transfer:24:160,dump:6:150", "30 yd topsoil remainder fits Bobtail, not another transfer");
 const transferRock = loadsOf(30, rockMat, "transfer");
-assert(transferRock.loads.map((load) => load.truck + ":" + load.yards + ":" + load.rate).join(",") === "transfer:20:160,transfer:10:160", "transfer selection keeps 30 yd rock on transfers");
+assert(transferRock.loads.map((load) => load.truck + ":" + load.yards + ":" + load.rate).join(",") === "transfer:20:160,dump:10:150", "30 yd rock remainder fits Bobtail");
+const rock45 = loadsOf(45, rockMat, "transfer");
+assert(rock45.loads.map((load) => load.truck + ":" + load.yards + ":" + load.rate).join(",") === "transfer:20:160,transfer:20:160,dump:5:150", "45 yd rock is two transfers plus a Bobtail 5, not three transfers");
+const rock43 = loadsOf(43, rockMat, "transfer");
+assert(rock43.loads.map((load) => load.truck + ":" + load.yards + ":" + load.rate).join(",") === "transfer:20:160,transfer:20:160,small:3:90", "a 3 yd rock remainder uses the Small 550");
 const forkLift = loadsOf(40, rockMat, "forklift");
 assert(forkLift.planned === false && forkLift.loads.length === 1 && forkLift.loads[0].truck === "forklift" && forkLift.loads[0].rate === 160, "forklift selection stays one forklift load at $160");
 assert(E.canonicalTruck("bobtail") === "dump" && E.canonicalTruck("small") === "small" && E.canonicalTruck("transfer") === "transfer" && E.canonicalTruck("forklift") === "forklift", "truck words map to the four ids");

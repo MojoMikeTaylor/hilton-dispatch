@@ -170,11 +170,11 @@ const multiHouse = multiHtml.slice(multiHtml.indexOf('<section class="sheet hous
 assert.strictEqual((multiCustomer.match(/class="dispatch-line"/g) || []).length, 2, "customer page prints one dispatch line per load");
 assert.strictEqual((multiHouse.match(/class="dispatch-line"/g) || []).length, 4, "house sheet repeats a dispatch line per load and a billable line per load");
 assert.ok(multiCustomer.includes('data-ticket="HD-MULTI"') && multiHouse.includes('data-ticket="HD-MULTI"'), "dispatch lines stay under the same ticket");
-assert.ok(multiHouse.includes("2 loads: Transfer 20 + Transfer 10"), "house sheet shows the load count and the split");
+assert.ok(multiHouse.includes("2 loads: Transfer 20 + Bobtail 10"), "house sheet shows the load count and the split");
 assert.ok(multiCustomer.includes("Environmental fee (Willow Creek)"), "Willow Creek environmental fee is on the receipt");
 assert.ok(multiCustomer.includes("$1.30/yd"), "Willow Creek material fuel is shown as $1.30/yd");
 assert.ok(multiCustomer.includes("<td>tote bagging, spread, additional service</td><td></td>"), "blank tote line prints with no amount");
-assert.ok(multiCustomer.includes("Dispatch — Transfer Truck") && !multiCustomer.includes("Dispatch — Small Truck 550"), "a Bobtail ticket does not dispatch the remainder as a Small 550");
+assert.ok(multiCustomer.includes("Dispatch — Transfer Truck") && multiCustomer.includes("Dispatch — Small Truck 550"), "dispatch lines name the trucks in the split");
 assert.ok(!multiCustomer.includes("Delivery — Dump"), "a multi-load invoice does not collapse the trucks into one delivery row");
 const multiFees = run("HDEngine.money(__multi.loads[0].deliveryFee)") + " " + run("HDEngine.money(__multi.loads[1].deliveryFee)");
 assert.ok(multiCustomer.includes(run("HDEngine.money(__multi.loads[0].deliveryFee)")) && multiCustomer.includes(run("HDEngine.money(__multi.loads[1].deliveryFee)")), "each dispatch line shows its own fee (" + multiFees + ")");
@@ -429,7 +429,7 @@ run(`
   state.draft.materials = [{ id: "topsoil", name: "Topsoil", unit: "yd", qty: 30, price: 25, book: "store" }];
   setTruck("transfer");
 `);
-assert.strictEqual(run("currentQuote().loads.map(function (load) { return load.truck + ':' + load.yards + ':' + load.rate; }).join(',')"), "transfer:24:160,transfer:6:160", "transfer selection does not drop topsoil onto a dump");
+assert.strictEqual(run("currentQuote().loads.map(function (load) { return load.truck + ':' + load.yards + ':' + load.rate; }).join(',')"), "transfer:24:160,dump:6:150", "transfer selection puts a fitting topsoil remainder on Bobtail");
 run(`setTruck("forklift");`);
 assert.strictEqual(run("currentQuote().loads.length"), 1, "forklift selection is one load");
 assert.strictEqual(run("currentQuote().loads[0].truck"), "forklift", "forklift selection stays a forklift");

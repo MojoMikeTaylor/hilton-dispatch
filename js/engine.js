@@ -205,26 +205,30 @@ window.HDEngine = {
     return "dump";
   },
 
-  // The selected truck is the floor. A remainder may move up to a larger truck.
-  // It may not move down: dump never becomes a Small 550, transfer never becomes dump or small.
+  // Full transfers first. The remainder uses the smallest truck that can carry it:
+  // Small 550, then Bobtail/dump, then another transfer.
+  // A Bobtail choice that can carry the whole order stays one Bobtail. It does not
+  // become a Small 550, and it is not split into several small loads.
   planQuantity(qty, cap, selectedTruck) {
     const q = Math.round((Number(qty) || 0) * 1000) / 1000;
     const transferCap = cap && Number(cap.transfer);
     const dumpCap = cap && Number(cap.dump);
     const smallCap = cap && Number(cap.small);
     if (!(q > 0) || !(transferCap > 0) || !(smallCap > 0)) return [];
-    const floor = this.canonicalTruck(selectedTruck);
+    const chosen = this.canonicalTruck(selectedTruck);
     const full = Math.floor((q + 1e-9) / transferCap);
     let rem = Math.round((q - full * transferCap) * 1000) / 1000;
     if (rem < 0.001) rem = 0;
     const loads = [];
     const pile = cap.pile || "";
+    if (full === 0 && chosen === "dump" && dumpCap > 0 && rem <= dumpCap + 1e-9) {
+      loads.push({ truck: "dump", kind: "dump", yards: rem, pile });
+      return loads;
+    }
     for (let i = 0; i < full; i++) loads.push({ truck: "transfer", kind: "transfer", yards: transferCap, pile });
     if (rem > 0) {
-      const smallOk = floor === "small" && rem <= smallCap + 1e-9;
-      const dumpOk = floor !== "transfer" && dumpCap > 0 && rem <= dumpCap + 1e-9;
-      if (smallOk) loads.push({ truck: "small", kind: "bobtail", yards: rem, pile });
-      else if (dumpOk) loads.push({ truck: "dump", kind: "dump", yards: rem, pile });
+      if (rem <= smallCap + 1e-9) loads.push({ truck: "small", kind: "bobtail", yards: rem, pile });
+      else if (dumpCap > 0 && rem <= dumpCap + 1e-9) loads.push({ truck: "dump", kind: "dump", yards: rem, pile });
       else loads.push({ truck: "transfer", kind: "transfer", yards: rem, pile });
     }
     return loads;
