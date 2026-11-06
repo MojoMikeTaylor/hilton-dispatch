@@ -55,23 +55,33 @@ assert(willow.find((m) => m.id === "q-dg-38-gold").price === 35, "Willow Creek 3
 assert(willow.every((m) => m.unit === "ton"), "Willow Creek catalog units stay tons so the phone line can show $/ton");
 const asphalt = willow.find((m) => m.id === "q-crushed-asphalt");
 assert(asphalt.price === 20 && asphalt.tonsPerYard === 1.3 && asphalt.tonsPerYardSource === "mike", "Crushed Asphalt keeps $20/ton and Mike's 1.3 t/yd");
-assert(W.length === 1 && W[0].source === "mike" && W[0].tonsPerYard === 1.3 && W[0].name === "Crushed Asphalt", "the only applied multiplier is Mike's Crushed Asphalt 1.3");
-const stayTon = ["q-jaw-run", "q-15-minus", "q-4-minus", "q-ogb", "q-38-12-clean", "q-34-12-clean", "q-34-1-clean", "q-4-8-clean", "q-rip-rap", "q-deco-rip-rap", "q-fill-dirt-dump", "q-dg-38-gold", "q-dg-34-gold", "q-cs-38-silver", "q-34-minus"];
+const sheetMinus = W.find((w) => w.name === "3/4 Minus");
+const pitMinus = willow.find((m) => m.id === "q-34-minus");
+assert(sheetMinus.tonsPerYard === 1.3095 && sheetMinus.source === "sheet", "sheet 3/4 Minus is 1.3095 tons per yard");
+assert(pitMinus.price === 13 && pitMinus.unit === "ton" && pitMinus.tonsPerYard === 1.3095 && pitMinus.tonsPerYardSource === "sheet", "pit 3/4 Minus keeps $13/ton and takes the exact sheet weight");
+assert(W.filter((w) => w.source === "sheet").length === 45 && W.filter((w) => w.source === "mike").length === 1, "sheet rows stay separate from Mike's Crushed Asphalt multiplier");
+const stayTon = ["q-jaw-run", "q-15-minus", "q-4-minus", "q-ogb", "q-38-12-clean", "q-34-12-clean", "q-34-1-clean", "q-4-8-clean", "q-rip-rap", "q-deco-rip-rap", "q-fill-dirt-dump", "q-dg-38-gold", "q-dg-34-gold", "q-cs-38-silver"];
 stayTon.forEach((id) => {
   const row = willow.find((m) => m.id === id);
   assert(row && row.unit === "ton" && !C.tonsPerYardOf(row) && C.missingYardWeight(row), id + " stays tons and is flagged missing yard weight");
 });
-assert(!C.tonsPerYardOf(willow.find((m) => m.id === "q-dg-38-gold")) && !C.tonsPerYardOf(willow.find((m) => m.id === "q-34-minus")), "3/8 gold and 3/4 minus are not inferred from a generic name");
-const multi = [
-  { name: "3/4 or 1 1/4 Granite", tonsPerYard: 1.4, source: "sheet" },
-  { name: "Crushed Asphalt", tonsPerYard: 9, source: "sheet" },
-];
-assert(C.matchYardWeight("3/4 Minus", multi) == null, "a multi-size granite name does not match 3/4 Minus");
-assert(C.matchYardWeight("Decomposed Granite 3/8 Minus Gold Decorative", multi) == null, "3/8 gold does not match a generic DG row");
-assert(C.matchYardWeight("Crushed Asphalt", multi).tonsPerYard === 9, "an exact name matches one row");
-W.forEach((w) => {
-  const hits = willow.filter((m) => C.normName(m.name) === C.normName(w.name));
-  assert(hits.length === 1, "applied yard weight " + w.name + " matches one catalog row");
+assert(!C.tonsPerYardOf(willow.find((m) => m.id === "q-dg-38-gold")) && !C.tonsPerYardOf(willow.find((m) => m.id === "q-dg-34-gold")), "sized decomposed granite does not take the generic DG weight");
+assert(C.matchYardWeight("3/4 Minus", W).tonsPerYard === 1.3095, "exact 3/4 Minus matches the sheet row");
+assert(C.matchYardWeight("3/4 or 1 1/4 Granite", [{ name: "3/4 Minus", tonsPerYard: 1.3095 }]) == null, "a multi-size granite name does not match 3/4 Minus");
+assert(C.matchYardWeight("Decomposed Granite 3/8 Minus Gold Decorative", W) == null, "3/8 gold does not match generic Decomposed Granite");
+[
+  ["fill-sand", "yd", 48],
+  ["fir-chips", "yd", 34],
+  ["playground-chips", "yd", 44],
+  ["aged-sawdust", "yd", 30],
+  ["mulch", "yd", 33],
+  ["beach-sand", "lb", 0.10],
+  ["white-silica", "lb", 0.18],
+  ["living-soil", "yd", 86],
+  ["clay-buster", "yd", 50],
+].forEach(([id, unit, price]) => {
+  const row = D.materials.find((m) => m.id === id);
+  assert(row.unit === unit && row.price === price && !C.tonsPerYardOf(row), id + " keeps its book unit and price");
 });
 const helper = deskHtml.split('id="truck-cap-helper"')[1].split("</p>")[0];
 const helperText = helper.slice(helper.indexOf(">") + 1).replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").trim();

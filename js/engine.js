@@ -411,13 +411,20 @@ window.HDEngine = {
     return (materials || []).map((m) => {
       const qty = Number(m && m.qty) || 0;
       const pricedLine = this.linePrice(m, plan);
-      const price = pricedLine.price;
+      const unit = this.normText(m && m.unit);
+      const yard = unit === "yd" || unit === "yard" || unit === "yards";
+      const storedUnit = Number(m && m.unitPrice);
+      const hasUnit = isFinite(storedUnit);
+      // A yard line bills unitPrice. The phone $/ton stays on tonPrice and is not applied again.
+      const price = (yard && hasUnit && !pricedLine.transferOnly) ? storedUnit : pricedLine.price;
       const tpy = Number(m && m.tonsPerYard);
       const hasWeight = isFinite(tpy) && tpy > 0;
       return {
         ...m,
         qty,
         price,
+        unitPrice: hasUnit ? storedUnit : m.unitPrice,
+        tonPrice: m && m.tonPrice,
         transferOnly: pricedLine.transferOnly,
         amount: Number((qty * price).toFixed(2)),
         missingYardWeight: this.isWillow(m) && !hasWeight,

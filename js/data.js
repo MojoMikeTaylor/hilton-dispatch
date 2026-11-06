@@ -325,9 +325,54 @@ window.HD_DEFAULTS.materials.forEach((m) => {
   if (!m.book) m.book = "store";
 });
 
-// Exact product-name matches only. Crushed Asphalt is Mike's multiplier, not a sheet row.
-// A sheet name that lists more than one size is not a match for one catalog variant.
+// Product weights sheet, column "Tons / yard", exact product names only.
+// Crushed Asphalt is not on that sheet. 1.3 is Mike's multiplier.
 window.HD_YARD_WEIGHTS = [
+  { name: "3/4 Minus", tonsPerYard: 1.3095, source: "sheet" },
+  { name: "Decomposed Granite", tonsPerYard: 1.458, source: "sheet" },
+  { name: "3/4 or 1 1/4 Granite", tonsPerYard: 1.188, source: "sheet" },
+  { name: "Fill Sand", tonsPerYard: 1.2285, source: "sheet" },
+  { name: "Pea Gravel", tonsPerYard: 1.3635, source: "sheet" },
+  { name: "3/4 Round or 1 3/4 Drain", tonsPerYard: 1.269, source: "sheet" },
+  { name: "Red Cinder", tonsPerYard: 0.756, source: "sheet" },
+  { name: "Black Cinder", tonsPerYard: 1.0395, source: "sheet" },
+  { name: "Rhyolite Sand", tonsPerYard: 0.7695, source: "sheet" },
+  { name: "3/8-7/8 Rhyolite", tonsPerYard: 0.486, source: "sheet" },
+  { name: "3/16-3/8 Rhyolite", tonsPerYard: 0.459, source: "sheet" },
+  { name: "Beach Sand", tonsPerYard: 1.188, source: "sheet" },
+  { name: "White Silica", tonsPerYard: 1.2285, source: "sheet" },
+  { name: "Sierra Desert", tonsPerYard: 1.0125, source: "sheet" },
+  { name: "Aspen Mountain", tonsPerYard: 1.0125, source: "sheet" },
+  { name: "Jade", tonsPerYard: 1.161, source: "sheet" },
+  { name: "Pami", tonsPerYard: 1.3165, source: "sheet" },
+  { name: "Mexi Pebble", tonsPerYard: 1.35, source: "sheet" },
+  { name: "Mexi Button", tonsPerYard: 1.4715, source: "sheet" },
+  { name: "Salt & Pepper 3/8", tonsPerYard: 1.323, source: "sheet" },
+  { name: "Salt & Pepper 1 1/2", tonsPerYard: 1.296, source: "sheet" },
+  { name: "Ivans Gold 3/4", tonsPerYard: 0.999, source: "sheet" },
+  { name: "Ivans Gold 1 1/4", tonsPerYard: 1.0125, source: "sheet" },
+  { name: "Top Soil", tonsPerYard: 1.0665, source: "sheet" },
+  { name: "Forest Loam", tonsPerYard: 0.8235, source: "sheet" },
+  { name: "Top Soil Plus", tonsPerYard: 0.81, source: "sheet" },
+  { name: "Compost", tonsPerYard: 0.432, source: "sheet" },
+  { name: "Clay Buster", tonsPerYard: 0.6615, source: "sheet" },
+  { name: "Gard 'N' Grow", tonsPerYard: 0.459, source: "sheet" },
+  { name: "Chef's Mix", tonsPerYard: 0.3915, source: "sheet" },
+  { name: "Super Chef's", tonsPerYard: 0.486, source: "sheet" },
+  { name: "Living Soil", tonsPerYard: 0.5535, source: "sheet" },
+  { name: "Super Soil", tonsPerYard: 0.4185, source: "sheet" },
+  { name: "Fresh Fines", tonsPerYard: 0.2295, source: "sheet" },
+  { name: "Aged Sawdust", tonsPerYard: 0.2295, source: "sheet" },
+  { name: "Multi-Bark", tonsPerYard: 0.2295, source: "sheet" },
+  { name: "Walk-On Bark", tonsPerYard: 0.162, source: "sheet" },
+  { name: "Fir Chips", tonsPerYard: 0.189, source: "sheet" },
+  { name: "Playground Chips", tonsPerYard: 0.162, source: "sheet" },
+  { name: "Mini Pebble", tonsPerYard: 0.216, source: "sheet" },
+  { name: "Small Nugget", tonsPerYard: 0.2565, source: "sheet" },
+  { name: "Medium Nugget", tonsPerYard: 0.2295, source: "sheet" },
+  { name: "Red Hemlock", tonsPerYard: 0.243, source: "sheet" },
+  { name: "Dark Silverless (Hemlock)", tonsPerYard: 0.324, source: "sheet" },
+  { name: "Mulch", tonsPerYard: 0.8505, source: "sheet" },
   { name: "Crushed Asphalt", tonsPerYard: 1.3, source: "mike" },
 ];
 

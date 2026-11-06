@@ -622,6 +622,32 @@ const fillStill = E.quote({
 assert(fillStill.lines[0].unit === "ton" && fillStill.lines[0].missingYardWeight && Math.abs(fillStill.materialsTotal - 60) < 0.01, "fill dirt dump fee stays $6/ton");
 const dumpBuffer = E.quote({ oneWaySeconds: 30 * 60, truck: "dump", billing: shop, materials: [] });
 assert(dumpBuffer.formula.indexOf("dump-truck buffer") >= 0, "the dump-truck buffer name stays on a bobtail-truck load");
+const minusPhone = 13;
+const minusWeight = 1.3095;
+const minusUnit = minusPhone * minusWeight;
+const minus10 = E.quote({
+  oneWaySeconds: 0,
+  truck: "dump",
+  billing: shop,
+  materials: [{
+    id: "q-34-minus",
+    name: "3/4 Minus",
+    unit: "yd",
+    qty: 10,
+    price: minusPhone,
+    tonPrice: minusPhone,
+    unitPrice: minusUnit,
+    tonsPerYard: minusWeight,
+    tonsPerYardSource: "sheet",
+    book: "willow",
+    source: "quarry",
+  }],
+});
+assert(Math.abs(minus10.materialsTotal - 170.24) < 0.001, "10 yd of $13/ton 3/4 Minus at 1.3095 t/yd is $170.24");
+assert(minus10.lines[0].tonPrice === 13 && Math.abs(minus10.lines[0].unitPrice - minusUnit) < 1e-9 && Math.abs(minus10.lines[0].price - minusUnit) < 1e-9, "phone $/ton stays separate from the yard unit price");
+const minusAgain = E.priceLines(minus10.lines);
+assert(Math.abs(minusAgain[0].amount - 170.24) < 0.001 && minusAgain[0].qty === 10, "the sheet yard price is not multiplied by tons per yard a second time");
+assert(Math.abs(minus10.environmentalFee - 5) < 0.01 && Math.abs(minus10.willowFuelPerYd - 1.3) < 0.001, "3/4 Minus keeps the $5 load fee and the $1.30/yd fuel rate");
 
 if (process.exitCode) {
   console.error("Engine tests failed.");

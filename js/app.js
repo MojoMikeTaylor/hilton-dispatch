@@ -1760,13 +1760,15 @@ function addMaterial(id) {
   if (existing) existing.qty = Number(existing.qty) + qty;
   else {
     const tonPrice = Number(m.price) || 0;
+    const unitPrice = tpy ? tonPrice * tpy : undefined;
     state.draft.materials.push({
       id: m.id,
       name: m.name,
       category: m.category,
       unit: tpy ? "yd" : (HDCatalog.isQuarry(m) ? "ton" : m.unit),
-      price: tpy ? tonPrice * tpy : m.price,
+      price: tpy ? unitPrice : m.price,
       tonPrice: HDCatalog.isQuarry(m) ? tonPrice : undefined,
+      unitPrice,
       tonsPerYard: tpy || undefined,
       tonsPerYardSource: tpy ? (m.tonsPerYardSource || "") : undefined,
       transferPrice: m.transferPrice,
