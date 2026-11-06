@@ -472,4 +472,51 @@ assert.ok(wCustomer.includes("$142.50") && wMail.includes("$142.50"), "customer 
 assert.ok(wCustomer.includes("Dispatch — Bobtail truck") && wHouse.includes("Bobtail truck") && !wCustomer.includes("Small Truck 550"), "the 8-yard load is Bobtail truck, not Small 550");
 assert.ok(wMail.startsWith("mailto:"), "the 108 yd draft is a mailto and is not sent");
 
+run(`
+  var __rock45 = { id: "three-quarter-minus", name: "3/4 Minus", category: "Rock / yard", unit: "yd", qty: 45, price: 28, book: "store" };
+  var __open = HDEngine.quote({ oneWaySeconds: 0, truck: "transfer", billing: db.settings.billing, materials: [__rock45] });
+  var __shut = HDEngine.quote({ oneWaySeconds: 0, truck: "transfer", bobtailOnly: true, billing: db.settings.billing, materials: [__rock45] });
+  var __note = "staging on the next street <b>Nick</b>";
+  db.jobs = [{
+    id: "HD-GATE", customer: "Gate Co", address: "1 Oak", status: "new", truck: "transfer", yardId: "cp",
+    bobtailOnly: true, accessNote: __note, deliverOn: "",
+    quote: __shut
+  }];
+  state.boardView = "live";
+  state.filter = "";
+  renderBoard();
+  buildPrint(db.jobs[0]);
+  var __mail = "";
+  openMailto = function (h) { __mail = h; };
+  emailAccounting(db.jobs[0]);
+  saveStore(db, false);
+  __saved = JSON.parse(localStorage.getItem(STORE_KEY));
+`);
+const gateBoard = els["job-table"].innerHTML;
+const gateHtml = els["print-root"].innerHTML;
+const gateCustomer = gateHtml.slice(gateHtml.indexOf('<section class="sheet customer">'), gateHtml.indexOf('<section class="sheet waiver">'));
+const gateHouse = gateHtml.slice(gateHtml.indexOf('<section class="sheet house">'));
+const gateMail = decodeURIComponent(run("__mail"));
+const flagLabel = "Bobtail only — no transfer access.";
+assert.ok(gateCustomer.includes(flagLabel) && gateHouse.includes(flagLabel) && gateBoard.includes(flagLabel), "the flag is on the quote, the house sheet, and the board");
+assert.ok(gateCustomer.includes("Nick must verify site access before this quote goes out.") && gateHouse.includes("Nick must verify site access before this quote goes out."), "Nick verification is on the quote and the house sheet");
+assert.ok(gateCustomer.includes("Not booked and not dispatch-verified.") && gateBoard.includes("Not booked"), "the flag is not a verified booking");
+assert.ok(gateCustomer.includes("staging on the next street") && gateHouse.includes("staging on the next street") && gateBoard.includes("staging on the next street"), "the clerk note is on the quote, the house sheet, and the board");
+assert.ok(!gateCustomer.includes("<b>Nick</b>") && gateCustomer.includes("&lt;b&gt;Nick&lt;/b&gt;"), "clerk note text is escaped");
+assert.ok(!gateMail.includes(flagLabel) && !gateMail.includes("staging on the next street"), "the dispatch email does not carry the access flag or note");
+assert.strictEqual(run("__open.loads.map(function (l) { return l.truck + ':' + l.yards; }).join(',')"), "transfer:20,transfer:20,dump:5", "unchecked 45 yd rock stays two transfers plus Bobtail 5");
+assert.ok(!run("__shut.loads.some(function (l) { return l.truck === 'transfer'; })"), "checked 45 yd rock uses no transfer");
+const kept = run("__saved.jobs.find(function (j) { return j.id === 'HD-GATE'; })");
+assert.strictEqual(kept.bobtailOnly, true, "the flag survives a save");
+assert.strictEqual(kept.accessNote, "staging on the next street <b>Nick</b>", "the note survives a save");
+run(`openTicket("HD-GATE");`);
+assert.strictEqual(run("$('f-bobtail-only').checked"), true, "opening the ticket restores the flag");
+assert.strictEqual(run("$('f-access-note').value"), "staging on the next street <b>Nick</b>", "opening the ticket restores the note");
+run(`
+  state.draft.bobtailOnly = false;
+  state.draft.accessNote = "Nick to route";
+  buildPrint(state.draft);
+`);
+assert.ok(!els["print-root"].innerHTML.includes(flagLabel), "an unchecked quote does not print the restriction");
+
 console.log("slip.test.js OK");

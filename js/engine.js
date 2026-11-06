@@ -209,32 +209,54 @@ window.HDEngine = {
   // Small 550, then Bobtail/dump, then another transfer.
   // A Bobtail choice that can carry the whole order stays one Bobtail. It does not
   // become a Small 550, and it is not split into several small loads.
-  planQuantity(qty, cap, selectedTruck) {
+  planQuantity(qty, cap, selectedTruck, bobtailOnly) {
     const q = Math.round((Number(qty) || 0) * 1000) / 1000;
     const transferCap = cap && Number(cap.transfer);
     const dumpCap = cap && Number(cap.dump);
     const smallCap = cap && Number(cap.small);
     if (!(q > 0) || !(transferCap > 0) || !(smallCap > 0)) return [];
     const chosen = this.canonicalTruck(selectedTruck);
+    const pile = cap.pile || "";
+    if (bobtailOnly) return this.planBobtailOnly(q, cap, pile, dumpCap, smallCap);
     const full = Math.floor((q + 1e-9) / transferCap);
     let rem = Math.round((q - full * transferCap) * 1000) / 1000;
     if (rem < 0.001) rem = 0;
     const loads = [];
-    const pile = cap.pile || "";
     if (full === 0 && chosen === "dump" && dumpCap > 0 && rem <= dumpCap + 1e-9) {
       loads.push({ truck: "dump", kind: "dump", yards: rem, pile });
       return loads;
     }
     for (let i = 0; i < full; i++) loads.push({ truck: "transfer", kind: "transfer", yards: transferCap, pile });
-    if (rem > 0) {
-      if (rem <= smallCap + 1e-9) {
-        // Willow's 10-yard slot is the displayed Bobtail, so it bills the Bobtail rate.
-        if (pile === "willow") loads.push({ truck: "dump", kind: "dump", yards: rem, pile });
-        else loads.push({ truck: "small", kind: "bobtail", yards: rem, pile });
-      } else if (dumpCap > 0 && rem <= dumpCap + 1e-9) loads.push({ truck: "dump", kind: "dump", yards: rem, pile });
-      else loads.push({ truck: "transfer", kind: "transfer", yards: rem, pile });
+    if (rem > 0) loads.push(this.remainderLoad(rem, smallCap, dumpCap, pile));
+    return loads;
+  },
+
+  // No transfer. Full Bobtail loads first. A remainder that fits the Small 550 uses it.
+  // Willow keeps its 10-yard Bobtail slot and that slot's $150 rate.
+  planBobtailOnly(q, cap, pile, dumpCap, smallCap) {
+    const willow = pile === "willow";
+    const bobtailCap = !willow && dumpCap > 0 ? dumpCap : smallCap;
+    if (!(bobtailCap > 0)) return [];
+    const fullB = Math.floor((q + 1e-9) / bobtailCap);
+    let left = Math.round((q - fullB * bobtailCap) * 1000) / 1000;
+    if (left < 0.001) left = 0;
+    const loads = [];
+    for (let i = 0; i < fullB; i++) loads.push({ truck: "dump", kind: "dump", yards: bobtailCap, pile });
+    if (left > 0) {
+      if (!willow && left <= smallCap + 1e-9) loads.push({ truck: "small", kind: "bobtail", yards: left, pile });
+      else loads.push({ truck: "dump", kind: "dump", yards: left, pile });
     }
     return loads;
+  },
+
+  remainderLoad(rem, smallCap, dumpCap, pile) {
+    if (rem <= smallCap + 1e-9) {
+      // Willow's 10-yard slot is the displayed Bobtail, so it bills the Bobtail rate.
+      if (pile === "willow") return { truck: "dump", kind: "dump", yards: rem, pile };
+      return { truck: "small", kind: "bobtail", yards: rem, pile };
+    }
+    if (dumpCap > 0 && rem <= dumpCap + 1e-9) return { truck: "dump", kind: "dump", yards: rem, pile };
+    return { truck: "transfer", kind: "transfer", yards: rem, pile };
   },
 
   loadTitle(load) {
@@ -264,7 +286,7 @@ window.HDEngine = {
   // Same capacity class is one pile (all store rock together, Forest Loam with Topsoil Plus,
   // bark/mulch/compost together). Pit rock does not pile with store rock.
   // By-the-pound items, flagstone, boulders, and forklift stone do not add a load.
-  planMaterials(materials, selectedTruck) {
+  planMaterials(materials, selectedTruck, bobtailOnly) {
     const truck = this.canonicalTruck(selectedTruck);
     if (truck === "forklift") {
       return {
@@ -287,7 +309,7 @@ window.HDEngine = {
     });
     const loads = [];
     order.forEach((key) => {
-      this.planQuantity(groups.get(key).qty, groups.get(key).cap, truck).forEach((load) => loads.push(load));
+      this.planQuantity(groups.get(key).qty, groups.get(key).cap, truck, bobtailOnly).forEach((load) => loads.push(load));
     });
     if (!loads.length) {
       return {
@@ -499,6 +521,7 @@ window.HDEngine = {
     forkliftFee,
     toteFee,
     yardId,
+    bobtailOnly,
   }) {
     const b = billing || {};
     const extraSite = 0;
@@ -506,7 +529,7 @@ window.HDEngine = {
     const extra = 0;
     const fee = Math.max(0, Number(forkliftFee) || 0);
     const tote = this.toteAmount(toteFee);
-    const plan = this.planMaterials(materials, truck);
+    const plan = this.planMaterials(materials, truck, !!bobtailOnly);
     const priced = plan.loads.map((load) => this.priceLoad({
       oneWaySeconds,
       truck: load.truck,
@@ -581,6 +604,7 @@ window.HDEngine = {
       taxRate,
       tax,
       total,
+      bobtailOnly: !!bobtailOnly,
       billing: b,
     };
     result.formula = this.describe(result);

@@ -91,7 +91,21 @@ function blankDraft() {
     paidBy: "",
     paidAt: null,
     customerCopy: false,
+    bobtailOnly: false,
+    accessNote: "",
   };
+}
+
+const BOBTAIL_ONLY_LABEL = "Bobtail only — no transfer access.";
+const BOBTAIL_ONLY_VERIFY = "Nick must verify site access before this quote goes out. Not booked and not dispatch-verified.";
+
+function accessBlock(ticket, compact) {
+  if (!ticket || !ticket.bobtailOnly) return "";
+  const note = String(ticket.accessNote || "").trim();
+  if (compact) {
+    return `<div class="muted access-flag">${esc(BOBTAIL_ONLY_LABEL)} Nick must verify. Not booked.${note ? " " + esc(note) : ""}</div>`;
+  }
+  return `<p class="access-flag"><strong>${esc(BOBTAIL_ONLY_LABEL)}</strong><br>${esc(BOBTAIL_ONLY_VERIFY)}${note ? `<br>${esc(note)}` : ""}</p>`;
 }
 
 function applyOfficialYards(existing) {
@@ -1134,7 +1148,7 @@ function renderBoard() {
           return `
           <tr class="clickable" data-open="${j.id}">
             <td><strong>${j.id}</strong><div class="muted">${(j.createdAt || "").replace("T", " ").slice(0, 16)}</div></td>
-            <td>${esc(j.customer) || "—"}${st === "quote" ? `<div class="muted">Quote</div>` : ""}${j.quarryDirect || isQuarryYard(j.yardId) ? `<div class="muted">Willow Creek — truckload</div>` : ""}<div class="muted">${esc(j.address)}</div></td>
+            <td>${esc(j.customer) || "—"}${st === "quote" ? `<div class="muted">Quote</div>` : ""}${j.quarryDirect || isQuarryYard(j.yardId) ? `<div class="muted">Willow Creek — truckload</div>` : ""}${accessBlock(j, true)}<div class="muted">${esc(j.address)}</div></td>
             <td>${esc((yardById(j.yardId) || {}).name || "")}</td>
             <td><span class="badge ${j.truck}">${truckLabel(j.truck)}</span>${loadSplitText(j.quote) ? `<div class="muted load-split">${esc(loadSplitText(j.quote))}</div>` : ""}</td>
             <td>${esc((j.deliverOn || "").replace("T", " "))}</td>
@@ -1161,6 +1175,7 @@ function renderWeekBoard(jobs) {
           <div>${esc(j.customer) || "—"}</div>
           <div class="muted">${esc((yardById(j.yardId) || {}).name || "")}</div>
           <div class="muted">${esc(truckName(j.truck))} · ${esc(deliverClock(j))}</div>
+          ${accessBlock(j, true)}
           ${loadSplitText(j.quote) ? `<div class="muted load-split">${esc(loadSplitText(j.quote))}</div>` : ""}
         </article>`).join("") : `<div class="week-empty">No deliveries</div>`}
     </section>`).join("")}</div>`;
@@ -1364,6 +1379,8 @@ function renderForm() {
   $("f-forklift-fee").value = d.forkliftFee || 0;
   $("f-status").value = normalizeStatus(d.status);
   if ($("f-quote")) $("f-quote").checked = isQuoteStatus(d.status);
+  if ($("f-bobtail-only")) $("f-bobtail-only").checked = !!d.bobtailOnly;
+  if ($("f-access-note")) $("f-access-note").value = d.accessNote || "";
   HDReceipt.normalize(d);
   if ($("f-pay")) $("f-pay").value = d.payMethod || "";
   if ($("f-paid")) $("f-paid").checked = !!d.paid;
@@ -1492,6 +1509,7 @@ function currentQuote() {
     forkliftFee: state.draft.forkliftFee,
     toteFee: state.draft.toteFee,
     yardId: state.draft.yardId,
+    bobtailOnly: !!state.draft.bobtailOnly,
   });
   if (isQuarryYard(state.draft.yardId)) {
     q.quarryDirect = true;
@@ -1518,6 +1536,7 @@ function renderQuoteBox() {
     <div class="total">${HDEngine.money(q.total)}</div>
     <div style="margin-top:8px">${HDEngine.money(q.deliveryFee)} delivery · ${HDEngine.money(q.materialsTotal)} materials${feeBit}${toteBit}${envBit}${wcFuelBit} · ${fuelBit}</div>
     ${splitBit}
+    ${accessBlock(state.draft)}
     ${quarryBit}
     <div class="break">${routed ? q.formula : "Punch the delivery address and hit Calculate route to lock time and delivery fee.\nMaterials, the forklift fee, and tote bagging, spread, additional service update the total as you type.\n" + HDEngine.fuelSentence(q)}</div>
     ${state.route ? `<div style="margin-top:10px;font-size:13px">Mapped ${state.route.miles.toFixed(1)} mi one-way via ${state.route.provider === "google" ? "Google" : "OSM / OSRM"}</div>` : ""}
@@ -1615,6 +1634,8 @@ function collectForm() {
   state.draft.paidBy = $("f-paid-by") ? $("f-paid-by").value.trim() : "";
   if (state.draft.paid && (!wasPaid || !state.draft.paidAt)) state.draft.paidAt = new Date().toISOString();
   state.draft.customerCopy = !!($("f-cust-copy") && $("f-cust-copy").checked);
+  state.draft.bobtailOnly = !!($("f-bobtail-only") && $("f-bobtail-only").checked);
+  state.draft.accessNote = ($("f-access-note") && $("f-access-note").value || "").trim();
   HDReceipt.normalize(state.draft);
 }
 
@@ -2060,6 +2081,7 @@ function buildPrint(ticket) {
   $("print-root").innerHTML = `
     <section class="sheet customer">
       <div class="keeps">CUSTOMER KEEPS THIS</div>
+      ${accessBlock(ticket)}
       <div class="sheet-head">
         <div>
           <div class="receipt-logo-frame"><img class="receipt-logo" src="img/hilton-logo.png" alt="Hilton Landscape Supply"></div>
@@ -2132,6 +2154,7 @@ function buildPrint(ticket) {
     </section>
     <section class="sheet house">
       <div class="keeps">DRIVER KEEPS THIS — house sheet, customer never sees it</div>
+      ${accessBlock(ticket)}
       <div class="sheet-head">
         <div>
           <h1>HOUSE SHEET</h1>
@@ -2536,6 +2559,11 @@ async function onReady() {
   $("save-btn").addEventListener("click", () => saveTicket());
   $("void-btn").addEventListener("click", voidTicket);
   $("delete-btn").addEventListener("click", deleteTicket);
+  if ($("f-bobtail-only")) $("f-bobtail-only").addEventListener("change", () => {
+    state.draft.bobtailOnly = $("f-bobtail-only").checked;
+    renderQuoteBox();
+  });
+  liveField("f-access-note", () => { state.draft.accessNote = ($("f-access-note").value || "").trim(); renderQuoteBox(); });
   $("f-quote").addEventListener("change", () => {
     if ($("f-quote").checked) {
       $("f-status").value = "quote";
