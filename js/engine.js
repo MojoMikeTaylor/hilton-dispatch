@@ -403,6 +403,28 @@ window.HDEngine = {
     return { price: retail, transferOnly: false };
   },
 
+  // Line amounts use the price already on the row. A yard row's price is the yard
+  // price (ton price × tons per yard), applied once when the row was added.
+  // Multiplying again, or turning that yard price back into a ton price, would undo it.
+  // Ton rows stay tons. The load plan reads these same qtys; this does not resize them.
+  priceLines(materials, plan) {
+    return (materials || []).map((m) => {
+      const qty = Number(m && m.qty) || 0;
+      const pricedLine = this.linePrice(m, plan);
+      const price = pricedLine.price;
+      const tpy = Number(m && m.tonsPerYard);
+      const hasWeight = isFinite(tpy) && tpy > 0;
+      return {
+        ...m,
+        qty,
+        price,
+        transferOnly: pricedLine.transferOnly,
+        amount: Number((qty * price).toFixed(2)),
+        missingYardWeight: this.isWillow(m) && !hasWeight,
+      };
+    });
+  },
+
   // $1/ton on Willow Creek material. Yard display is $1.30/yd at 1.3 t/yd.
   // Tons and yards describe the same charge: qty tons * $1 = (qty / 1.3) yd * $1.30.
   willowFuelFor(materials) {
@@ -455,18 +477,7 @@ window.HDEngine = {
       ? Number(priced.reduce((s, load) => s + load.billableHours, 0).toFixed(4))
       : primary.billableHours;
 
-    const lines = (materials || []).map((m) => {
-      const qty = Number(m.qty) || 0;
-      const pricedLine = this.linePrice(m, plan);
-      const price = pricedLine.price;
-      return {
-        ...m,
-        qty,
-        price,
-        transferOnly: pricedLine.transferOnly,
-        amount: Number((qty * price).toFixed(2)),
-      };
-    });
+    const lines = this.priceLines(materials, plan);
     const materialsTotal = Number(lines.reduce((s, l) => s + l.amount, 0).toFixed(2));
     const fuel = this.fuelFrom(b, deliveryFee);
     const environmentalLoads = priced.filter((load) => load.pile === "willow").length;
@@ -593,7 +604,7 @@ window.HDEngine = {
   describeLoads(q) {
     const tripLabel = q.tripFactor === 2 ? "round trip" : "one way";
     const loadLines = (q.loads || []).map((load, i) => {
-      const name = load.truck === "transfer" ? "Transfer" : load.truck === "small" ? "Bobtail" : load.truck === "forklift" ? "Forklift" : "Dump";
+      const name = load.truck === "transfer" ? "Transfer" : load.truck === "small" ? "Bobtail" : load.truck === "forklift" ? "Forklift" : "Bobtail truck";
       const buf = (load.isDump || load.isTransfer) ? `, road × ${Number(load.multiplier).toFixed(2)}` : "";
       const stage = load.southStage ? ` including ${this.money(load.southStage)} South Stage` : "";
       return `Load ${i + 1} of ${q.loads.length}: ${name}${buf}, ${load.billableHours.toFixed(2)} hr @ $${load.rate}/hr = ${this.money(load.deliveryFee)}${stage}`;

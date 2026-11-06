@@ -7,6 +7,7 @@ vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname, "data.js"), "utf8"), sandbox);
 const D = sandbox.window.HD_DEFAULTS;
 const C = sandbox.window.HDCatalog;
+const W = sandbox.window.HD_YARD_WEIGHTS;
 
 function assert(cond, msg) {
   if (!cond) {
@@ -51,7 +52,36 @@ assert(flag.find((m) => m.id === "fs-gator-maxx2").unit === "bag", "Gator Maxx2 
 assert(boulders.find((m) => m.id === "br-b-basalt").price === 0.25, "Basalt boulder is on the boulders book");
 assert(willow.find((m) => m.id === "q-jaw-run").price === 12.5, "Willow Creek Jaw Run is $12.50/ton");
 assert(willow.find((m) => m.id === "q-dg-38-gold").price === 35, "Willow Creek 3/8 gold decorative is $35/ton");
-assert(willow.every((m) => m.unit === "ton"), "Willow Creek is tons only");
+assert(willow.every((m) => m.unit === "ton"), "Willow Creek catalog units stay tons so the phone line can show $/ton");
+const asphalt = willow.find((m) => m.id === "q-crushed-asphalt");
+assert(asphalt.price === 20 && asphalt.tonsPerYard === 1.3 && asphalt.tonsPerYardSource === "mike", "Crushed Asphalt keeps $20/ton and Mike's 1.3 t/yd");
+assert(W.length === 1 && W[0].source === "mike" && W[0].tonsPerYard === 1.3 && W[0].name === "Crushed Asphalt", "the only applied multiplier is Mike's Crushed Asphalt 1.3");
+const stayTon = ["q-jaw-run", "q-15-minus", "q-4-minus", "q-ogb", "q-38-12-clean", "q-34-12-clean", "q-34-1-clean", "q-4-8-clean", "q-rip-rap", "q-deco-rip-rap", "q-fill-dirt-dump", "q-dg-38-gold", "q-dg-34-gold", "q-cs-38-silver", "q-34-minus"];
+stayTon.forEach((id) => {
+  const row = willow.find((m) => m.id === id);
+  assert(row && row.unit === "ton" && !C.tonsPerYardOf(row) && C.missingYardWeight(row), id + " stays tons and is flagged missing yard weight");
+});
+assert(!C.tonsPerYardOf(willow.find((m) => m.id === "q-dg-38-gold")) && !C.tonsPerYardOf(willow.find((m) => m.id === "q-34-minus")), "3/8 gold and 3/4 minus are not inferred from a generic name");
+const multi = [
+  { name: "3/4 or 1 1/4 Granite", tonsPerYard: 1.4, source: "sheet" },
+  { name: "Crushed Asphalt", tonsPerYard: 9, source: "sheet" },
+];
+assert(C.matchYardWeight("3/4 Minus", multi) == null, "a multi-size granite name does not match 3/4 Minus");
+assert(C.matchYardWeight("Decomposed Granite 3/8 Minus Gold Decorative", multi) == null, "3/8 gold does not match a generic DG row");
+assert(C.matchYardWeight("Crushed Asphalt", multi).tonsPerYard === 9, "an exact name matches one row");
+W.forEach((w) => {
+  const hits = willow.filter((m) => C.normName(m.name) === C.normName(w.name));
+  assert(hits.length === 1, "applied yard weight " + w.name + " matches one catalog row");
+});
+const helper = deskHtml.split('id="truck-cap-helper"')[1].split("</p>")[0];
+const helperText = helper.slice(helper.indexOf(">") + 1).replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").trim();
+assert(helperText === "Small 550 — 3 rock, 4 soil, 5 bark.\nDump — 10 rock, 12 soil, 20 bark.\nTransfer — 20 rock, 24 topsoil, 30 forest loam and topsoil plus, 50 bark.", "forklift helper is only the three truck-cap lines");
+assert(!/quote|void|willow|forklift fee|fuel surcharge/i.test(helperText), "helper block has no quote, void, quarry, fee, or fuel copy");
+assert(deskHtml.includes("<strong>Bobtail truck</strong>") && deskHtml.includes("Bobtail truck $/hr") && deskHtml.includes("$150 / hour"), "Dump truck label is Bobtail truck at $150/hour");
+assert(!deskHtml.includes("<strong>Dump</strong>") && deskHtml.includes("Dump-road buffer"), "settings keep the dump-road buffer name");
+const appJs = fs.readFileSync(path.join(__dirname, "app.js"), "utf8");
+assert(appJs.includes("Dump route buffer"), "Dump route buffer name stays");
+assert(appJs.includes('return "Bobtail truck"'), "ticket truck name is Bobtail truck");
 assert(!willow.some((m) => m.id === "topsoil"), "store soils do not leak into Willow Creek");
 assert(D.weights.rock === 2500 && D.weights.bark === 900, "weight helper numbers are on the defaults");
 

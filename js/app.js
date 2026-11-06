@@ -1217,7 +1217,7 @@ function truckName(truck) {
   if (truck === "forklift") return "Forklift";
   if (truck === "transfer") return "Transfer Truck";
   if (truck === "small") return "Small Truck 550";
-  return "Dump";
+  return "Bobtail truck";
 }
 
 function truckLabel(truck) {
@@ -1225,7 +1225,7 @@ function truckLabel(truck) {
   if (truck === "forklift") return `Forklift $${b.forkliftRate || 160}`;
   if (truck === "transfer") return `Transfer $${b.transferRate || 160}`;
   if (truck === "small") return `Small 550 $${b.smallRate}`;
-  return `Dump $${b.dumpRate}`;
+  return `Bobtail truck $${b.dumpRate}`;
 }
 
 function defaultRateFor(truck) {
@@ -1325,7 +1325,7 @@ function syncBookTabs() {
     store: "Bark/Mulch — store price sheet 2026, yard retail. Search this tab only.",
     flagstone: "Flagstone 2026 — prices per pound unless bag. Forklift fee is extra.",
     boulders: "Boulders/Aggregates flyer. Approx. weights: rock 2500 · sand 2600 · bark 900 · cinder 1500 lb/yd.",
-    willow: "Willow Creek pit prices in tons. Isolated from store yard prices.",
+    willow: "Willow Creek phone prices stay $/ton. A yard weight tickets in yards. Missing yard weight stays tons.",
   };
   if ($("book-hint")) $("book-hint").textContent = hints[state.book] || "";
 }
@@ -1408,11 +1408,12 @@ function renderMaterialLines() {
       const qLine = quoted[i];
       const amount = qLine ? qLine.amount : (Number(m.qty) || 0) * (Number(m.price) || 0);
       const basis = qLine && qLine.transferOnly ? `<div class="muted">transfer-only ${HDEngine.money(qLine.price)}/yd</div>` : "";
+      const missing = qLine ? qLine.missingYardWeight : HDCatalog.missingYardWeight(m);
       return `
       <tr>
         <td>
           <input value="${escAttr(m.name)}" data-line="${i}" data-k="name">
-          <div class="muted">${esc(m.category || "")}</div>
+          <div class="muted">${esc(m.category || "")}${missing ? " · Missing yard weight" : ""}</div>
         </td>
         <td><input type="number" min="0" step="0.25" value="${m.qty}" data-line="${i}" data-k="qty" style="width:90px"></td>
         <td><input value="${escAttr(m.unit)}" data-line="${i}" data-k="unit" style="width:80px"></td>
@@ -1433,12 +1434,21 @@ function onLineEdit(e) {
   const k = t.dataset.k;
   if (k === "qty" || k === "price") m[k] = Number(t.value) || 0;
   else m[k] = t.value;
-  if (HDCatalog.isQuarry(m) && k === "unit" && String(t.value).toLowerCase() !== "ton") {
-    m.unit = "ton";
-    t.value = "ton";
-    toast("Quarry is truckload — tons only");
+  if (HDCatalog.isQuarry(m) && k === "unit") {
+    const yard = HDCatalog.tonsPerYardOf(m);
+    const v = String(t.value || "").toLowerCase();
+    if (yard) {
+      if (v !== "yd" && v !== "yard" && v !== "yards") {
+        m.unit = "yd";
+        t.value = "yd";
+      }
+    } else if (v !== "ton") {
+      m.unit = "ton";
+      t.value = "ton";
+      toast("Quarry is truckload — tons only");
+    }
   }
-  if (HDCatalog.isQuarry(m) && k === "qty" && (Number(m.qty) || 0) < 1) {
+  if (HDCatalog.isQuarry(m) && k === "qty" && !HDCatalog.tonsPerYardOf(m) && (Number(m.qty) || 0) < 1) {
     m.qty = 1;
     t.value = 1;
   }
@@ -1735,8 +1745,8 @@ function materialSearch(q) {
     : pool
   ).slice(0, 16);
   $("mat-results").innerHTML = hits.map((m) =>
-    `<div data-add="${m.id}"><strong>${esc(m.name)}</strong> · ${HDEngine.money(m.price)} / ${esc(m.unit)}
-     <div class="cat">${esc(m.category)}${m.requires_forklift ? " · forklift" : ""}${m.special ? " · special order" : ""}${m.note ? " · " + esc(m.note) : ""}</div></div>`
+    `<div data-add="${m.id}"><strong>${esc(m.name)}</strong> · ${HDEngine.money(m.price)} / ${HDCatalog.isQuarry(m) ? "ton" : esc(m.unit)}
+     <div class="cat">${esc(m.category)}${m.requires_forklift ? " · forklift" : ""}${m.special ? " · special order" : ""}${HDCatalog.missingYardWeight(m) ? " · Missing yard weight" : ""}${m.note ? " · " + esc(m.note) : ""}</div></div>`
   ).join("") || (s ? `<div class="empty">No match in this book — switch tabs or add it under Material Book</div>` : `<div class="empty">Type to search this book</div>`);
 }
 
@@ -1744,16 +1754,21 @@ function addMaterial(id) {
   const m = db.settings.materials.find((x) => x.id === id);
   if (!m) return;
   let qty = Number($("mat-qty").value) || 1;
-  if (HDCatalog.isQuarry(m) && qty < 1) qty = 1;
+  const tpy = HDCatalog.tonsPerYardOf(m);
+  if (HDCatalog.isQuarry(m) && !tpy && qty < 1) qty = 1;
   const existing = state.draft.materials.find((x) => x.id === id);
   if (existing) existing.qty = Number(existing.qty) + qty;
   else {
+    const tonPrice = Number(m.price) || 0;
     state.draft.materials.push({
       id: m.id,
       name: m.name,
       category: m.category,
-      unit: HDCatalog.isQuarry(m) ? "ton" : m.unit,
-      price: m.price,
+      unit: tpy ? "yd" : (HDCatalog.isQuarry(m) ? "ton" : m.unit),
+      price: tpy ? tonPrice * tpy : m.price,
+      tonPrice: HDCatalog.isQuarry(m) ? tonPrice : undefined,
+      tonsPerYard: tpy || undefined,
+      tonsPerYardSource: tpy ? (m.tonsPerYardSource || "") : undefined,
       transferPrice: m.transferPrice,
       qty,
       source: m.source,
@@ -1942,7 +1957,7 @@ function renderCatalog() {
       <td><input value="${escAttr(m.category)}" data-c="${i}" data-k="category"></td>
       <td><input value="${escAttr(m.unit)}" data-c="${i}" data-k="unit" style="width:70px"></td>
       <td><input type="number" step="0.01" value="${m.price}" data-c="${i}" data-k="price" style="width:100px"></td>
-      <td class="muted">${esc(book)}${m.special ? " · special" : ""}${m.note ? " · " + esc(m.note) : ""}</td>
+      <td class="muted">${esc(book)}${m.special ? " · special" : ""}${HDCatalog.missingYardWeight(m) ? " · Missing yard weight" : ""}${m.note ? " · " + esc(m.note) : ""}</td>
       <td><button class="ghost" data-cd="${i}">Delete</button></td>
     </tr>`;
   }).join("");

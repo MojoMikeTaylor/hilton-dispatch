@@ -325,6 +325,12 @@ window.HD_DEFAULTS.materials.forEach((m) => {
   if (!m.book) m.book = "store";
 });
 
+// Exact product-name matches only. Crushed Asphalt is Mike's multiplier, not a sheet row.
+// A sheet name that lists more than one size is not a match for one catalog variant.
+window.HD_YARD_WEIGHTS = [
+  { name: "Crushed Asphalt", tonsPerYard: 1.3, source: "mike" },
+];
+
 window.HDCatalog = {
   books: [
     { id: "store", label: "Bark/Mulch" },
@@ -338,6 +344,23 @@ window.HDCatalog = {
     if (m.source === "quarry" || m.truckload_only) return "willow";
     if (m.requires_forklift || (m.category || "").indexOf("Flagstone") >= 0) return "flagstone";
     return "store";
+  },
+  normName(s) {
+    return String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+  },
+  // One exact name, or nothing. "3/4 or 1 1/4 Granite" does not match "3/4 Minus".
+  matchYardWeight(name, rows) {
+    const n = this.normName(name);
+    if (!n) return null;
+    const hits = (rows || []).filter((row) => row && this.normName(row.name) === n);
+    return hits.length === 1 ? hits[0] : null;
+  },
+  tonsPerYardOf(m) {
+    const n = Number(m && m.tonsPerYard);
+    return isFinite(n) && n > 0 ? n : null;
+  },
+  missingYardWeight(m) {
+    return this.isQuarry(m) && !this.tonsPerYardOf(m);
   },
   isQuarry(m) {
     return this.bookOf(m) === "willow";
@@ -436,3 +459,11 @@ window.HDCatalog = {
     return JSON.parse(JSON.stringify(window.HD_DEFAULTS.materials || []));
   },
 };
+
+window.HD_DEFAULTS.materials.forEach((m) => {
+  if (window.HDCatalog.bookOf(m) !== "willow") return;
+  const hit = window.HDCatalog.matchYardWeight(m.name, window.HD_YARD_WEIGHTS);
+  if (!hit) return;
+  m.tonsPerYard = hit.tonsPerYard;
+  m.tonsPerYardSource = hit.source;
+});

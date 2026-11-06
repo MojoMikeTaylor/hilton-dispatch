@@ -79,7 +79,7 @@ assert.ok(/\.sheet\.customer,\s*\n\s*\.sheet\.customer table \{ font-size: 13\.5
 assert.ok(/\.sheet \{ padding: 0; font-size: 11\.5px;/.test(printCss), "house sheet and waiver stay at 11.5px");
 assert.ok(!/\.sheet\.house[^{]*font-size:\s*13\.5px/.test(printCss) && !/\.sheet\.waiver[^{]*font-size:\s*13\.5px/.test(printCss), "13.5px is not applied to the house sheet or waiver");
 for (const needle of ["HD-TEST-1", "Smoke Test Customer", "1250 Biddle Rd, Medford, OR", "Topsoil", "3 yd", "Jaw Run", "2 ton", "3 yd · 2 ton",
-  "$25.00", "$12.50", "Delivery — Dump</td><td>" + run("HDEngine.money(__t.quote.deliveryFee)"), "Total " + total, "Credit — PAID, marked by Grace"]) {
+  "$25.00", "$12.50", "Delivery — Bobtail truck</td><td>" + run("HDEngine.money(__t.quote.deliveryFee)"), "Total " + total, "Credit — PAID, marked by Grace"]) {
   assert.ok(customer.includes(needle), "customer page shows " + needle);
 }
 const body = customer.slice(0, customer.indexOf('<div class="totals-box">'));
@@ -213,7 +213,7 @@ const r30 = els["print-root"].innerHTML;
 const r30House = r30.slice(r30.indexOf('<section class="sheet house">'));
 const r30Customer = r30.slice(r30.indexOf('<section class="sheet customer">'), r30.indexOf('<section class="sheet waiver">'));
 assert.ok(r30House.includes("2 loads: Transfer 20 + Dump 10"), "house sheet shows 30 yd rock as 1 transfer + 1 dump");
-assert.ok(r30Customer.includes("2 loads: Transfer 20 + Dump 10") || r30Customer.includes("Dispatch — Transfer Truck") && r30Customer.includes("Dispatch — Dump"), "customer receipt shows both trucks");
+assert.ok(r30Customer.includes("Dispatch — Transfer Truck") && r30Customer.includes("Dispatch — Bobtail truck"), "customer receipt shows both trucks");
 assert.strictEqual((r30Customer.match(/data-ticket="HD-R30"/g) || []).length, 2, "30 yd rock is one invoice");
 assert.ok(r30Customer.includes("Total " + run("HDEngine.money(__r30.total)")), "30 yd rock prints one total");
 assert.ok(!r30Customer.includes("Transfer 20 + Transfer 20"), "30 yd rock is not two transfers");

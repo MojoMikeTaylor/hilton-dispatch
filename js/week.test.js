@@ -129,7 +129,7 @@ assert.strictEqual((board.match(/class="week-col"/g) || []).length, 6);
 assert.ok(board.indexOf("EARLY") < board.indexOf("LATE"), "cards render in time order");
 assert.ok(board.includes("Early Co") && board.includes("Later Co"));
 assert.ok(board.includes("Hilton Landscape Supply (Mothership)") && board.includes("Hilton Landscape Supply (Phoenix) #2"));
-assert.ok(board.includes("Dump") && board.includes("8:15 AM"));
+assert.ok(board.includes("Bobtail truck") && board.includes("8:15 AM"));
 assert.ok(board.includes("Small Truck 550") && board.includes("3:00 PM"));
 assert.ok(board.includes('data-open="EARLY"') && board.includes('data-open="LATE"'));
 assert.ok(!board.includes("Quote Co") && !board.includes("QUOTE"));

@@ -564,6 +564,65 @@ assert(!dupes.some((d) => d.id === "Q-SELF"), "the open quote is not a duplicate
 const none = E.duplicateQuotes([{ id: "Q", status: "quote", customer: "", address: "", phone: "", quote: { total: 1 } }], { customer: "", address: "", phone: "" });
 assert(none.length === 0, "blank fields do not match every quote");
 
+const asphalt10 = E.quote({
+  oneWaySeconds: 0,
+  truck: "dump",
+  billing: shop,
+  materials: [{
+    id: "q-crushed-asphalt",
+    name: "Crushed Asphalt",
+    unit: "yd",
+    qty: 10,
+    price: 20 * 1.3,
+    tonPrice: 20,
+    tonsPerYard: 1.3,
+    tonsPerYardSource: "mike",
+    book: "willow",
+    source: "quarry",
+    truckload_only: true,
+  }],
+});
+assert(Math.abs(asphalt10.materialsTotal - 260) < 0.01, "10 yd Crushed Asphalt at $20/ton × 1.3 t/yd is $260 before delivery");
+assert(asphalt10.lines[0].unit === "yd" && asphalt10.lines[0].qty === 10 && Math.abs(asphalt10.lines[0].price - 26) < 0.001, "the ticket qty stays yards and the yard price is not converted again");
+assert(!asphalt10.lines[0].missingYardWeight, "Crushed Asphalt has Mike's yard weight");
+assert(asphalt10.environmentalLoads === 1 && Math.abs(asphalt10.environmentalFee - 5) < 0.01, "the $5 per load environmental fee stays outside the $260");
+assert(Math.abs(asphalt10.willowFuelPerYd - 1.3) < 0.001 && Math.abs(asphalt10.willowFuel - 13) < 0.01, "Willow fuel stays $1.30/yd on the yard qty, separate from the material");
+assert(asphalt10.formula.indexOf("$1.30/yd") >= 0 && asphalt10.split === "Bobtail 10", "10 yd of pit rock is one bobtail and the fuel rate still prints");
+assert(Math.abs(asphalt10.total - (asphalt10.deliveryFee + 260 + 5 + 13)) < 0.01, "delivery, the $260, the $5 fee, and the fuel stay separate");
+const asphaltAgain = E.priceLines(asphalt10.lines);
+assert(asphaltAgain[0].qty === 10 && Math.abs(asphaltAgain[0].price - 26) < 0.001 && Math.abs(asphaltAgain[0].amount - 260) < 0.01, "pricing the yard line again does not invert it");
+const tonQty = 13;
+const yardsFromTons = tonQty / 1.3;
+const beforeSwitch = 20 * tonQty;
+const afterSwitch = E.priceLines([{
+  name: "Crushed Asphalt", unit: "yd", qty: yardsFromTons, price: 20 * 1.3, tonPrice: 20, tonsPerYard: 1.3, book: "willow",
+}])[0];
+assert(Math.abs(beforeSwitch - afterSwitch.amount) < 0.001 && Math.abs(beforeSwitch - 260) < 0.001, "ton price × tons equals yard price × yards");
+const asphalt26 = E.quote({
+  oneWaySeconds: 0,
+  truck: "dump",
+  billing: shop,
+  materials: [{ id: "q-crushed-asphalt", name: "Crushed Asphalt", unit: "yd", qty: 26, price: 26, tonPrice: 20, tonsPerYard: 1.3, book: "willow" }],
+});
+assert(asphalt26.split === "Transfer 20 + Bobtail 6" && Math.abs(asphalt26.materialsTotal - 676) < 0.01, "the load plan uses the yard qty, not a second ton conversion");
+const jawMissing = E.quote({
+  oneWaySeconds: 0,
+  truck: "dump",
+  billing: shop,
+  materials: [{ id: "q-jaw-run", name: "Jaw Run", unit: "ton", qty: 10, price: 12.5, book: "willow", source: "quarry" }],
+});
+assert(jawMissing.lines[0].missingYardWeight && jawMissing.lines[0].unit === "ton" && Math.abs(jawMissing.materialsTotal - 125) < 0.01, "a row with no yard weight stays tons and is flagged");
+assert(Math.abs(jawMissing.willowFuel - 10) < 0.01 && Math.abs(jawMissing.environmentalFee - 5) < 0.01, "missing yard weight keeps $1 per ton fuel and the $5 load fee");
+const fillStill = E.quote({
+  oneWaySeconds: 0,
+  truck: "dump",
+  billing: shop,
+  materials: [{ id: "q-fill-dirt-dump", name: "Fill Dirt Dump Fee", unit: "ton", qty: 10, price: 6, book: "willow", source: "quarry", truckload_only: true }],
+});
+assert(fillStill.lines[0].unit === "ton" && fillStill.lines[0].missingYardWeight && Math.abs(fillStill.materialsTotal - 60) < 0.01, "fill dirt dump fee stays $6/ton");
+const dumpBuffer = E.quote({ oneWaySeconds: 30 * 60, truck: "dump", billing: shop, materials: [] });
+assert(dumpBuffer.formula.indexOf("dump-truck buffer") >= 0, "the dump-truck buffer name stays on a bobtail-truck load");
+
 if (process.exitCode) {
   console.error("Engine tests failed.");
 } else {
