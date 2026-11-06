@@ -326,7 +326,7 @@ window.HD_DEFAULTS.materials.forEach((m) => {
 });
 
 // Product weights sheet, column "Tons / yard", exact product names only.
-// Crushed Asphalt is not on that sheet. 1.3 is Mike's multiplier.
+// Willow Creek pit rows use HD_WILLOW_LB_PER_YD instead of this sheet.
 window.HD_YARD_WEIGHTS = [
   { name: "3/4 Minus", tonsPerYard: 1.3095, source: "sheet" },
   { name: "Decomposed Granite", tonsPerYard: 1.458, source: "sheet" },
@@ -373,8 +373,28 @@ window.HD_YARD_WEIGHTS = [
   { name: "Red Hemlock", tonsPerYard: 0.243, source: "sheet" },
   { name: "Dark Silverless (Hemlock)", tonsPerYard: 0.324, source: "sheet" },
   { name: "Mulch", tonsPerYard: 0.8505, source: "sheet" },
-  { name: "Crushed Asphalt", tonsPerYard: 1.3, source: "mike" },
 ];
+
+// Mike's pit marks, pounds per cubic yard. Tons per yard is lb / 2000.
+// These are not rows from the Product weights sheet.
+window.HD_WILLOW_LB_PER_YD = {
+  "q-dg-38-gold": 2916,
+  "q-dg-34-gold": 2916,
+  "q-cs-38-silver": 2916,
+  "q-34-minus": 2619,
+  "q-15-minus": 2619,
+  "q-4-minus": 2619,
+  "q-jaw-run": 2619,
+  "q-ogb": 2376,
+  "q-38-12-clean": 2376,
+  "q-34-12-clean": 2376,
+  "q-34-1-clean": 2376,
+  "q-4-8-clean": 2916,
+  "q-rip-rap": 2916,
+  "q-deco-rip-rap": 2916,
+  "q-crushed-asphalt": 2376,
+  "q-fill-dirt-dump": 2376,
+};
 
 window.HDCatalog = {
   books: [
@@ -507,8 +527,9 @@ window.HDCatalog = {
 
 window.HD_DEFAULTS.materials.forEach((m) => {
   if (window.HDCatalog.bookOf(m) !== "willow") return;
-  const hit = window.HDCatalog.matchYardWeight(m.name, window.HD_YARD_WEIGHTS);
-  if (!hit) return;
-  m.tonsPerYard = hit.tonsPerYard;
-  m.tonsPerYardSource = hit.source;
+  const lb = window.HD_WILLOW_LB_PER_YD[m.id];
+  if (!(lb > 0)) return;
+  m.lbPerYard = lb;
+  m.tonsPerYard = lb / 2000;
+  m.tonsPerYardSource = "mike";
 });

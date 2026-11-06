@@ -573,31 +573,33 @@ const asphalt10 = E.quote({
     name: "Crushed Asphalt",
     unit: "yd",
     qty: 10,
-    price: 20 * 1.3,
+    price: 20 * 1.188,
     tonPrice: 20,
-    tonsPerYard: 1.3,
+    tonsPerYard: 1.188,
     tonsPerYardSource: "mike",
     book: "willow",
     source: "quarry",
     truckload_only: true,
   }],
 });
-assert(Math.abs(asphalt10.materialsTotal - 260) < 0.01, "10 yd Crushed Asphalt at $20/ton × 1.3 t/yd is $260 before delivery");
-assert(asphalt10.lines[0].unit === "yd" && asphalt10.lines[0].qty === 10 && Math.abs(asphalt10.lines[0].price - 26) < 0.001, "the ticket qty stays yards and the yard price is not converted again");
+assert(Math.abs(asphalt10.materialsTotal - 237.6) < 0.001, "10 yd Crushed Asphalt at $20/ton × 1.188 t/yd is $237.60 before delivery");
+assert(asphalt10.lines[0].unit === "yd" && asphalt10.lines[0].qty === 10 && Math.abs(asphalt10.lines[0].price - 23.76) < 0.001, "the ticket qty stays yards and the yard price is not converted again");
 assert(!asphalt10.lines[0].missingYardWeight, "Crushed Asphalt has Mike's yard weight");
-assert(asphalt10.environmentalLoads === 1 && Math.abs(asphalt10.environmentalFee - 5) < 0.01, "the $5 per load environmental fee stays outside the $260");
-assert(Math.abs(asphalt10.willowFuelPerYd - 1.3) < 0.001 && Math.abs(asphalt10.willowFuel - 13) < 0.01, "Willow fuel stays $1.30/yd on the yard qty, separate from the material");
+assert(asphalt10.environmentalLoads === 1 && Math.abs(asphalt10.environmentalFee - 5) < 0.01, "the $5 per load environmental fee stays outside the material total");
+assert(Math.abs(asphalt10.willowFuelPerYd - 1.3) < 0.001 && Math.abs(asphalt10.willowFuel - 13) < 0.01 && Math.abs(asphalt10.willowFuel - (10 * 1.188)) > 0.01, "Willow fuel stays $1.30/yd and is not the product tons per yard");
 assert(asphalt10.formula.indexOf("$1.30/yd") >= 0 && asphalt10.split === "Bobtail 10", "10 yd of pit rock is one bobtail and the fuel rate still prints");
-assert(Math.abs(asphalt10.total - (asphalt10.deliveryFee + 260 + 5 + 13)) < 0.01, "delivery, the $260, the $5 fee, and the fuel stay separate");
+assert(Math.abs(asphalt10.total - (asphalt10.deliveryFee + 237.6 + 5 + 13)) < 0.01, "delivery, the $237.60, the $5 fee, and the fuel stay separate");
 const asphaltAgain = E.priceLines(asphalt10.lines);
-assert(asphaltAgain[0].qty === 10 && Math.abs(asphaltAgain[0].price - 26) < 0.001 && Math.abs(asphaltAgain[0].amount - 260) < 0.01, "pricing the yard line again does not invert it");
-const tonQty = 13;
-const yardsFromTons = tonQty / 1.3;
+assert(asphaltAgain[0].qty === 10 && Math.abs(asphaltAgain[0].price - 23.76) < 0.001 && Math.abs(asphaltAgain[0].amount - 237.6) < 0.001, "pricing the yard line again does not invert it");
+const asphaltTpy = 2376 / 2000;
+const tonQty = 10 * asphaltTpy;
 const beforeSwitch = 20 * tonQty;
 const afterSwitch = E.priceLines([{
-  name: "Crushed Asphalt", unit: "yd", qty: yardsFromTons, price: 20 * 1.3, tonPrice: 20, tonsPerYard: 1.3, book: "willow",
+  name: "Crushed Asphalt", unit: "yd", qty: 10, price: 20 * asphaltTpy, tonPrice: 20, tonsPerYard: asphaltTpy, book: "willow",
 }])[0];
-assert(Math.abs(beforeSwitch - afterSwitch.amount) < 0.001 && Math.abs(beforeSwitch - 260) < 0.001, "ton price × tons equals yard price × yards");
+assert(Math.abs(beforeSwitch - afterSwitch.amount) < 0.001 && Math.abs(afterSwitch.amount - 237.6) < 0.001, "ton price × tons equals yard price × yards");
+assert(E.money(13 * (2619 / 2000)) === "$17.02", "3/4 Minus yard unit price prints at $17.02");
+assert(Math.abs(13 * (2619 / 2000) - 17.0235) < 1e-9, "the unrounded 3/4 Minus yard unit price stays 17.0235");
 const asphalt26 = E.quote({
   oneWaySeconds: 0,
   truck: "dump",

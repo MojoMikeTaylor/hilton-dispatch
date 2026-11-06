@@ -343,12 +343,22 @@ assert.strictEqual(run("state.draft.materials[0].unitPrice"), undefined, "a stor
 assert(Math.abs(run("currentQuote().materialsTotal") - 120) < 0.01, "4 yd of edited topsoil is $120");
 
 run(`
+  var __mapped = function (id, qty) {
+    var row = db.settings.materials.find(function (m) { return m.id === id; });
+    var ton = Number(row.price) || 0;
+    var unitPrice = ton * row.tonsPerYard;
+    return { id: row.id, name: row.name, qty: qty, unit: "yd", price: unitPrice, tonPrice: ton, unitPrice: unitPrice, tonsPerYard: row.tonsPerYard, tonsPerYardSource: row.tonsPerYardSource, book: "willow", source: "quarry" };
+  };
   var __flag = HDEngine.quote({
     truck: "dump", oneWaySeconds: 0, billing: db.settings.billing,
     materials: [
-      { id: "q-jaw-run", name: "Jaw Run", qty: 4, unit: "ton", price: 12.5, book: "willow", source: "quarry" },
-      { id: "q-crushed-asphalt", name: "Crushed Asphalt", qty: 10, unit: "yd", price: 26, tonPrice: 20, unitPrice: 26, tonsPerYard: 1.3, book: "willow", source: "quarry" },
-      { id: "topsoil", name: "Topsoil", qty: 3, unit: "yd", price: 25, book: "store" }
+      __mapped("q-jaw-run", 1),
+      __mapped("q-crushed-asphalt", 10),
+      __mapped("q-fill-dirt-dump", 10),
+      __mapped("q-rip-rap", 1),
+      __mapped("q-deco-rip-rap", 1),
+      { id: "topsoil", name: "Topsoil", qty: 3, unit: "yd", price: 25, book: "store" },
+      { id: "q-unmapped", name: "Unmapped Pit", qty: 2, unit: "ton", price: 10, book: "willow", source: "quarry" }
     ]
   });
   var __flagTicket = {
@@ -364,11 +374,42 @@ const flagHtml = els["print-root"].innerHTML;
 const flagCustomer = flagHtml.slice(flagHtml.indexOf('<section class="sheet customer">'), flagHtml.indexOf('<section class="sheet waiver">'));
 const flagHouse = flagHtml.slice(flagHtml.indexOf('<section class="sheet house">'));
 const flagMail = decodeURIComponent(run("__flagHref"));
-assert.ok(flagCustomer.includes("Jaw Run — Missing yard weight"), "customer receipt flags a missing yard weight");
-assert.ok(flagHouse.includes("Jaw Run — Missing yard weight"), "house sheet flags a missing yard weight");
-assert.ok(flagMail.includes("Jaw Run @ $12.50 = $50.00 — Missing yard weight"), "the draft email flags a missing yard weight");
-assert.ok(!flagCustomer.includes("Crushed Asphalt — Missing yard weight") && !flagHouse.includes("Crushed Asphalt — Missing yard weight") && !flagMail.includes("Crushed Asphalt @ $26.00 = $260.00 — Missing yard weight"), "a yard-weighted row is not flagged");
-assert.ok(!flagCustomer.includes("Topsoil — Missing yard weight") && !flagHouse.includes("Topsoil — Missing yard weight") && !flagMail.includes("Topsoil @ $25.00 = $75.00 — Missing yard weight"), "a store row is not flagged");
+for (const name of ["Jaw Run", "Crushed Asphalt", "Fill Dirt Dump Fee", "Rip Rap (loaded with loader)", "Deco Rip Rap (loaded with excavator) — Call Mike Taylor", "Topsoil"]) {
+  assert.ok(!flagCustomer.includes(name + " — Missing yard weight"), "customer receipt does not flag " + name);
+  assert.ok(!flagHouse.includes(name + " — Missing yard weight"), "house sheet does not flag " + name);
+  assert.ok(!flagMail.includes(name + " @") || !flagMail.includes(name) || flagMail.indexOf(name + " — Missing yard weight") === -1, "draft email does not flag " + name);
+}
+assert.ok(flagCustomer.includes("Unmapped Pit — Missing yard weight"), "customer receipt still flags a row with no yard weight");
+assert.ok(flagHouse.includes("Unmapped Pit — Missing yard weight"), "house sheet still flags a row with no yard weight");
+assert.ok(flagMail.includes("Unmapped Pit @ $10.00 = $20.00 — Missing yard weight"), "the draft email still flags a row with no yard weight");
+assert.ok(flagCustomer.includes("Crushed Asphalt") && flagMail.includes("Crushed Asphalt @ $23.76 = $237.60"), "10 yd Crushed Asphalt prints at $237.60");
 assert.ok(flagMail.startsWith("mailto:"), "the draft stays a mailto and is not sent");
+
+run(`
+  state.book = "willow";
+  state.draft = blankDraft();
+  state.route = null;
+  $("mat-qty").value = "1";
+  materialSearch("crushed asphalt");
+`);
+const asphaltSearch = els["mat-results"].innerHTML;
+assert.ok(asphaltSearch.includes("$20.00 / ton"), "search keeps the Crushed Asphalt phone price per ton");
+assert.ok(!asphaltSearch.includes("Missing yard weight"), "a mapped pit row is not flagged in search");
+run(`addMaterial("q-crushed-asphalt");`);
+assert.strictEqual(run("state.draft.materials[0].unit"), "yd", "adding Crushed Asphalt tickets yards");
+assert.strictEqual(run("state.draft.materials[0].tonPrice"), 20, "the added line keeps $20 per ton");
+assert(Math.abs(run("state.draft.materials[0].unitPrice") - 23.76) < 0.001, "1 yd unit price is $20 × 1.188");
+assert(Math.abs(run("currentQuote().materialsTotal") - 23.76) < 0.001, "1 yd of Crushed Asphalt is $23.76");
+lineEdit("qty", "10");
+assert(Math.abs(run("currentQuote().materialsTotal") - 237.6) < 0.001, "10 yd of Crushed Asphalt is $237.60");
+assert.strictEqual(run("state.draft.materials[0].tonPrice"), 20, "changing yards does not multiply the phone price");
+assert(Math.abs(run("currentQuote().willowFuelPerYd") - 1.3) < 0.001, "fuel display stays $1.30 per yard");
+assert.strictEqual(run("db.settings.billing.dumpRate"), 150, "the bobtail truck rate stays $150");
+run(`state.draft = blankDraft(); $("mat-qty").value = "1"; materialSearch("jaw run"); addMaterial("q-jaw-run"); materialSearch("rip rap"); addMaterial("q-rip-rap"); materialSearch("fill dirt"); addMaterial("q-fill-dirt-dump");`);
+assert.ok(!els["mat-results"].innerHTML.includes("Missing yard weight"), "fill dirt search is not flagged");
+assert.strictEqual(run("state.draft.materials.map(function (m) { return m.unit; }).join()"), "yd,yd,yd", "jaw, rip rap, and fill dirt ticket as yards");
+assert.strictEqual(run("state.draft.materials[2].tonPrice"), 6, "fill dirt phone price stays $6 per ton");
+assert(Math.abs(run("state.draft.materials[2].unitPrice") - (6 * 1.188)) < 0.001, "fill dirt yard price is $6 times 1.188");
+assert.ok(!run("state.draft.materials.some(function (m) { return HDCatalog.missingYardWeight(m); })"), "mapped draft rows are not missing a yard weight");
 
 console.log("slip.test.js OK");

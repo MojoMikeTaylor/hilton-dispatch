@@ -53,19 +53,27 @@ assert(boulders.find((m) => m.id === "br-b-basalt").price === 0.25, "Basalt boul
 assert(willow.find((m) => m.id === "q-jaw-run").price === 12.5, "Willow Creek Jaw Run is $12.50/ton");
 assert(willow.find((m) => m.id === "q-dg-38-gold").price === 35, "Willow Creek 3/8 gold decorative is $35/ton");
 assert(willow.every((m) => m.unit === "ton"), "Willow Creek catalog units stay tons so the phone line can show $/ton");
+const mikeLb = {
+  "q-dg-38-gold": 2916, "q-dg-34-gold": 2916, "q-cs-38-silver": 2916,
+  "q-34-minus": 2619, "q-15-minus": 2619, "q-4-minus": 2619, "q-jaw-run": 2619,
+  "q-ogb": 2376, "q-38-12-clean": 2376, "q-34-12-clean": 2376, "q-34-1-clean": 2376,
+  "q-4-8-clean": 2916, "q-rip-rap": 2916, "q-deco-rip-rap": 2916,
+  "q-crushed-asphalt": 2376, "q-fill-dirt-dump": 2376,
+};
+assert(willow.length === 16 && willow.every((m) => mikeLb[m.id]), "every Willow Creek row has a Mike pound mark");
+willow.forEach((m) => {
+  const lb = mikeLb[m.id];
+  assert(m.lbPerYard === lb && m.tonsPerYard === lb / 2000 && m.tonsPerYardSource === "mike" && !C.missingYardWeight(m), m.id + " uses lb/2000 from Mike, not a missing-weight flag");
+});
 const asphalt = willow.find((m) => m.id === "q-crushed-asphalt");
-assert(asphalt.price === 20 && asphalt.tonsPerYard === 1.3 && asphalt.tonsPerYardSource === "mike", "Crushed Asphalt keeps $20/ton and Mike's 1.3 t/yd");
+assert(asphalt.price === 20 && asphalt.tonsPerYard === 1.188 && asphalt.lbPerYard === 2376, "Crushed Asphalt stays $20/ton at 2376 lb/yd");
 const sheetMinus = W.find((w) => w.name === "3/4 Minus");
 const pitMinus = willow.find((m) => m.id === "q-34-minus");
-assert(sheetMinus.tonsPerYard === 1.3095 && sheetMinus.source === "sheet", "sheet 3/4 Minus is 1.3095 tons per yard");
-assert(pitMinus.price === 13 && pitMinus.unit === "ton" && pitMinus.tonsPerYard === 1.3095 && pitMinus.tonsPerYardSource === "sheet", "pit 3/4 Minus keeps $13/ton and takes the exact sheet weight");
-assert(W.filter((w) => w.source === "sheet").length === 45 && W.filter((w) => w.source === "mike").length === 1, "sheet rows stay separate from Mike's Crushed Asphalt multiplier");
-const stayTon = ["q-jaw-run", "q-15-minus", "q-4-minus", "q-ogb", "q-38-12-clean", "q-34-12-clean", "q-34-1-clean", "q-4-8-clean", "q-rip-rap", "q-deco-rip-rap", "q-fill-dirt-dump", "q-dg-38-gold", "q-dg-34-gold", "q-cs-38-silver"];
-stayTon.forEach((id) => {
-  const row = willow.find((m) => m.id === id);
-  assert(row && row.unit === "ton" && !C.tonsPerYardOf(row) && C.missingYardWeight(row), id + " stays tons and is flagged missing yard weight");
-});
-assert(!C.tonsPerYardOf(willow.find((m) => m.id === "q-dg-38-gold")) && !C.tonsPerYardOf(willow.find((m) => m.id === "q-dg-34-gold")), "sized decomposed granite does not take the generic DG weight");
+assert(sheetMinus.tonsPerYard === 1.3095 && sheetMinus.source === "sheet", "the sheet row for 3/4 Minus stays 1.3095");
+assert(pitMinus.price === 13 && pitMinus.unit === "ton" && pitMinus.lbPerYard === 2619 && pitMinus.tonsPerYard === 1.3095 && pitMinus.tonsPerYardSource === "mike", "pit 3/4 Minus keeps $13/ton and Mike's 2619 lb/yd");
+assert(W.filter((w) => w.source === "sheet").length === 45 && !W.some((w) => w.source === "mike"), "the sheet array has no Mike pit marks");
+assert(willow.find((m) => m.id === "q-dg-38-gold").tonsPerYardSource === "mike" && C.matchYardWeight("Decomposed Granite 3/8 Minus Gold Decorative", W) == null, "3/8 gold is Mike's 2916 lb mark, not the generic sheet DG row");
+assert(willow.find((m) => m.id === "q-dg-34-gold").lbPerYard === 2916, "3/4 gold decomposed granite is marked at 2916 lb/yd");
 assert(C.matchYardWeight("3/4 Minus", W).tonsPerYard === 1.3095, "exact 3/4 Minus matches the sheet row");
 assert(C.matchYardWeight("3/4 or 1 1/4 Granite", [{ name: "3/4 Minus", tonsPerYard: 1.3095 }]) == null, "a multi-size granite name does not match 3/4 Minus");
 assert(C.matchYardWeight("Decomposed Granite 3/8 Minus Gold Decorative", W) == null, "3/8 gold does not match generic Decomposed Granite");
