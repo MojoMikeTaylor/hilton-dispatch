@@ -116,7 +116,9 @@ window.HDEngine = {
   // Class caps in yards. These replace the flat 10 yd bobtail / 20 yd transfer store-bulk split.
   // Small 550, dump, then transfer. A remainder rides the smallest truck that can carry it.
   // Soil transfer is 24 except Forest Loam and Topsoil Plus, which stay 30.
-  // Other soils use that same 24. Compost is with bark/mulch, not with soil.
+  // Other soils use that same 24. Compost stays with bark, not with soil.
+  // Mulch is its own class. Bark and compost dump/bobtail is 25 yd.
+  // Mulch stays 5 on the Small 550, 20 on the dump, and 50 on a transfer.
   // Willow Creek quarry rock is NOT this rock class. Small rock is 3 yd and dump rock is 10 yd,
   // so the class rule would make 30 yd of pit rock a transfer plus a dump. The named quarry rule
   // is still bobtail 10 / transfer 20 (30 yd = transfer + bobtail, 40 yd = two transfers, no dump).
@@ -125,7 +127,8 @@ window.HDEngine = {
     soil: { small: 4, dump: 12, transfer: 24, pile: "soil" },
     topsoil: { small: 4, dump: 12, transfer: 24, pile: "topsoil" },
     loam: { small: 4, dump: 12, transfer: 30, pile: "loam" },
-    bark: { small: 5, dump: 20, transfer: 50, pile: "bark" },
+    bark: { small: 5, dump: 25, transfer: 50, pile: "bark" },
+    mulch: { small: 5, dump: 20, transfer: 50, pile: "mulch" },
     willow: { small: 10, dump: 0, transfer: 20, pile: "willow" },
   },
 
@@ -174,7 +177,7 @@ window.HDEngine = {
     return !!String(material.id || "");
   },
 
-  // rock, topsoil, loam (Forest Loam + Topsoil Plus), soil, bark (bark/mulch/compost), or willow.
+  // rock, topsoil, loam (Forest Loam + Topsoil Plus), soil, bark (bark and compost), mulch, or willow.
   materialClass(material) {
     if (!material) return null;
     if (this.isWillow(material)) return "willow";
@@ -185,7 +188,8 @@ window.HDEngine = {
     if (id === "topsoil" || name === "topsoil" || name === "top soil") return "topsoil";
     if (id === "forest-loam" || id === "topsoil-plus" || name === "forest loam" || name === "topsoil plus") return "loam";
     const blob = id + " " + name + " " + cat;
-    if (/compost|bark|mulch|sawdust|chip|nugget|hemlock|bedding|gorilla|forest floor/.test(blob)) return "bark";
+    if (/\bmulch\b/.test(blob)) return "mulch";
+    if (/compost|bark|sawdust|chip|nugget|hemlock|bedding|gorilla|forest floor/.test(blob)) return "bark";
     if (cat === "soils" || cat.indexOf("soil") >= 0) return "soil";
     return "rock";
   },
@@ -284,7 +288,8 @@ window.HDEngine = {
   },
 
   // Same capacity class is one pile (all store rock together, Forest Loam with Topsoil Plus,
-  // bark/mulch/compost together). Pit rock does not pile with store rock.
+  // bark and compost together). Mulch is its own pile so the 20 yd dump cap stays on mulch.
+  // Pit rock does not pile with store rock.
   // By-the-pound items, flagstone, boulders, and forklift stone do not add a load.
   planMaterials(materials, selectedTruck, bobtailOnly) {
     const truck = this.canonicalTruck(selectedTruck);

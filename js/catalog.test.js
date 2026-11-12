@@ -93,7 +93,7 @@ assert(C.matchYardWeight("Decomposed Granite 3/8 Minus Gold Decorative", W) == n
 });
 const helper = deskHtml.split('id="truck-cap-helper"')[1].split("</p>")[0];
 const helperText = helper.slice(helper.indexOf(">") + 1).replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").trim();
-assert(helperText === "Small 550 — 3 rock, 4 soil, 5 bark.\nDump — 10 rock, 12 soil, 20 bark.\nTransfer — 20 rock, 24 topsoil, 30 forest loam and topsoil plus, 50 bark.", "forklift helper is only the three truck-cap lines");
+assert(helperText === "Small 550 — 3 rock, 4 soil, 5 bark.\nDump — 10 rock, 12 soil, 25 bark and compost, 20 mulch.\nTransfer — 20 rock, 24 topsoil, 30 forest loam and topsoil plus, 50 bark.", "forklift helper is only the three truck-cap lines");
 assert(!/quote|void|willow|forklift fee|fuel surcharge/i.test(helperText), "helper block has no quote, void, quarry, fee, or fuel copy");
 assert(deskHtml.includes("<strong>Bobtail truck</strong>") && deskHtml.includes("Bobtail truck $/hr") && deskHtml.includes("$150 / hour"), "Dump truck label is Bobtail truck at $150/hour");
 assert(!deskHtml.includes("<strong>Dump</strong>") && deskHtml.includes("Dump-road buffer"), "settings keep the dump-road buffer name");
