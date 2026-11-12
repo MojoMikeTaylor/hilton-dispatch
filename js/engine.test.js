@@ -280,7 +280,8 @@ assert(splitOf(10, wc, "small") === "D", "the Willow 10-yard slot stays the Bobt
 assert(E.TRUCK_CAPS.willow.dump === 0 && E.TRUCK_CAPS.willow.small === 10 && E.TRUCK_CAPS.willow.transfer === 20, "Willow Creek named rule stays bobtail 10 / transfer 20 with no dump");
 assert(E.TRUCK_CAPS.rock.small === 3 && E.TRUCK_CAPS.rock.dump === 10 && E.TRUCK_CAPS.rock.transfer === 20, "rock class is 3 / 10 / 20");
 assert(E.TRUCK_CAPS.topsoil.small === 4 && E.TRUCK_CAPS.topsoil.dump === 12 && E.TRUCK_CAPS.topsoil.transfer === 24, "topsoil class is 4 / 12 / 24");
-assert(E.TRUCK_CAPS.loam.transfer === 30 && E.TRUCK_CAPS.bark.small === 5 && E.TRUCK_CAPS.bark.dump === 20 && E.TRUCK_CAPS.bark.transfer === 50, "loam transfer is 30 and bark is 5 / 20 / 50");
+assert(E.TRUCK_CAPS.loam.transfer === 30 && E.TRUCK_CAPS.bark.small === 5 && E.TRUCK_CAPS.bark.dump === 25 && E.TRUCK_CAPS.bark.transfer === 50, "loam transfer is 30 and bark/compost is 5 / 25 / 50");
+assert(E.TRUCK_CAPS.mulch.small === 5 && E.TRUCK_CAPS.mulch.dump === 20 && E.TRUCK_CAPS.mulch.transfer === 50, "mulch stays 5 / 20 / 50");
 assert(splitOf(3, { id: "three-quarter-minus", name: "3/4\" Minus", category: "Rock / yard", unit: "yd", price: 28, book: "store" }) === "D", "3 yd rock on Bobtail stays a dump");
 assert(splitOf(3, { id: "three-quarter-minus", name: "3/4\" Minus", category: "Rock / yard", unit: "yd", price: 28, book: "store" }, "small") === "B", "3 yd rock on Small 550 still fits the small truck");
 assert(splitOf(4, { id: "three-quarter-minus", name: "3/4\" Minus", category: "Rock / yard", unit: "yd", price: 28, book: "store" }) === "D", "4 yd rock needs a dump");
@@ -296,7 +297,16 @@ assert(splitOf(37, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }) ==
 assert(splitOf(5, { id: "fresh-fines", name: "Fresh Fines Bark", unit: "yd", price: 34, book: "store" }) === "D", "5 yd bark on Bobtail stays a dump");
 assert(splitOf(5, { id: "fresh-fines", name: "Fresh Fines Bark", unit: "yd", price: 34, book: "store" }, "small") === "B", "5 yd bark on Small 550 still fits the small truck");
 assert(splitOf(20, { id: "fresh-fines", name: "Fresh Fines Bark", unit: "yd", price: 34, book: "store" }) === "D", "20 yd bark is one dump");
+assert(splitOf(25, { id: "fresh-fines", name: "Fresh Fines Bark", unit: "yd", price: 34, book: "store" }) === "D", "25 yd bark is one dump");
+assert(splitOf(26, { id: "fresh-fines", name: "Fresh Fines Bark", unit: "yd", price: 34, book: "store" }) === "T", "26 yd bark is one transfer");
 assert(splitOf(50, { id: "fresh-fines", name: "Fresh Fines Bark", unit: "yd", price: 34, book: "store" }) === "T", "50 yd bark is one transfer");
+const bark75 = E.quote({
+  oneWaySeconds: 30 * 60,
+  truck: "dump",
+  billing: shop,
+  materials: [{ id: "fresh-fines", name: "Fresh Fines Bark", unit: "yd", price: 34, qty: 75, book: "store" }],
+});
+assert(bark75.loadCount === 2 && bark75.split === "Transfer 50 + Bobtail 25" && bark75.loads[0].truck === "transfer" && bark75.loads[0].yards === 50 && bark75.loads[1].truck === "dump" && bark75.loads[1].yards === 25, "75 yd bark is 1 transfer (50) plus 1 dump (25)");
 assert(splitOf(15, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 27 }) === "T", "15 yd forest loam is 1 transfer");
 assert(splitOf(16, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 27 }) === "T", "16 yd forest loam is 1 transfer");
 assert(splitOf(30, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 27 }) === "T", "30 yd forest loam is 1 transfer");
@@ -474,7 +484,12 @@ assert(Math.abs(fill.lines[0].price - 6) < 0.01 && Math.abs(fill.materialsTotal 
 assert(fill.environmentalLoads === 1 && Math.abs(fill.environmentalFee - 5) < 0.01, "one Willow Creek load adds the $5 environmental fee");
 assert(Math.abs(fill.willowFuel - 10) < 0.01, "10 ton of Willow Creek material fuel is $10");
 
-assert(splitOf(40, { id: "compost-omri", name: "Compost (OMRI Listed)", category: "Soils", unit: "yd", price: 35, book: "store" }) === "T", "compost uses the bark/mulch/compost cap");
+assert(splitOf(40, { id: "compost-omri", name: "Compost (OMRI Listed)", category: "Soils", unit: "yd", price: 35, book: "store" }) === "T", "compost uses the bark/compost cap");
+assert(splitOf(25, { id: "compost-omri", name: "Compost (OMRI Listed)", category: "Soils", unit: "yd", price: 35, book: "store" }) === "D", "25 yd compost is one dump");
+const mulch = { id: "mulch", name: "Mulch", category: "Bark", unit: "yd", price: 33, book: "store" };
+assert(E.materialClass(mulch) === "mulch" && E.materialClass({ id: "fresh-fines", name: "Fresh Fines Bark", category: "Bark", unit: "yd", book: "store" }) === "bark", "mulch is split off the bark class");
+assert(splitOf(20, mulch) === "D", "20 yd mulch still fits one dump");
+assert(splitOf(25, mulch) === "T", "25 yd mulch does not fit one dump");
 assert(splitOf(24, { id: "topsoil", name: "Topsoil", unit: "yd", price: 25 }) === "T", "topsoil cap stays 24 yd on one transfer");
 assert(splitOf(30, { id: "forest-loam", name: "Forest Loam", unit: "yd", price: 27 }) === "T", "forest loam cap stays 30 yd on one transfer");
 assert(splitOf(30, { id: "topsoil-plus", name: "Topsoil Plus", unit: "yd", price: 34 }) === "T", "topsoil plus cap stays 30 yd on one transfer");
